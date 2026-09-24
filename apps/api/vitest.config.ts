@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     environment: 'node',
+    // Integration tests start PostgreSQL and Redis containers (Testcontainers).
+    hookTimeout: 120_000,
+    testTimeout: 15_000,
   },
 });
