@@ -25,7 +25,9 @@ const REQUEST_ID_HEADER = 'x-request-id';
               const incoming = req.headers[REQUEST_ID_HEADER];
               return typeof incoming === 'string' && incoming.length > 0 ? incoming : randomUUID();
             },
-            autoLogging: { ignore: (req: IncomingMessage) => req.url === '/health' },
+            autoLogging: {
+              ignore: (req: IncomingMessage) => req.url?.startsWith('/health') ?? false,
+            },
             redact: ['req.headers.authorization', 'req.headers.cookie'],
             transport:
               nodeEnv === 'development'
