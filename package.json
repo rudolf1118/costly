@@ -1,0 +1,17 @@
+{
+  "name": "costly",
+  "private": true,
+  "description": "Personal finance management, analysis and forecasting system",
+  "packageManager": "pnpm@12.6.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "build": "pnpm -r --if-present build"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.3"
+  }
+}
