@@ -1,0 +1,44 @@
+# Local development infrastructure. The api, worker and web services are added
+# once they have Dockerfiles; until then they run on the host with `pnpm dev`.
+#
+# Host ports are 5433/6380 rather than the defaults, so Costly does not collide
+# with a PostgreSQL or Redis already installed on the machine. Override them
+# with COSTLY_POSTGRES_PORT / COSTLY_REDIS_PORT. Bound to 127.0.0.1 only: the
+# credentials are development defaults and must not be reachable from the network.
+name: costly
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: costly
+      POSTGRES_PASSWORD: costly
+      POSTGRES_DB: costly
+    ports:
+      - '127.0.0.1:${COSTLY_POSTGRES_PORT:-5433}:5432'
+    volumes:
+      # PostgreSQL 18 images keep data under /var/lib/postgresql/<version>/.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U costly -d costly']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:8-alpine
+    # Append-only file so queued jobs survive a Redis restart.
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '127.0.0.1:${COSTLY_REDIS_PORT:-6380}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  postgres-data:
+  redis-data:
