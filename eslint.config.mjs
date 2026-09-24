@@ -24,6 +24,15 @@ export default tseslint.config(
       'no-console': 'warn',
     },
   },
+  {
+    // NestJS resolves constructor dependencies from decorator metadata at runtime,
+    // so injected classes must stay value imports. Telling the parser about the
+    // decorator settings makes consistent-type-imports respect that.
+    files: ['apps/api/**/*.ts'],
+    languageOptions: {
+      parserOptions: { emitDecoratorMetadata: true, experimentalDecorators: true },
+    },
+  },
   // Keep last: turns off rules that conflict with Prettier formatting.
   prettier,
 );
