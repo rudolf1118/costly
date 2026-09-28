@@ -15,7 +15,12 @@ ledger     analytics       forecasting    goals · what-if · recommendations
 ```
 
 ## Status
-**Planning stage.** The specification is ready for review. Implementation starts in October 2026.
+**Chapter 0 — foundation complete.** The pnpm monorepo, a NestJS API with a health endpoint that
+checks PostgreSQL and Redis, a React client that displays it, Docker Compose, GitHub Actions CI
+and the first four architecture decision records are in place. No financial features exist yet.
+
+**Chapter 1 — financial core** is next: authentication, accounts, categories, merchants,
+transactions and transfers, recurring rules, and a first dashboard, released as `v0.1.0`.
 
 ## Documents
 | Document | For |
