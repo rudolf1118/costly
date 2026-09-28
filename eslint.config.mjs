@@ -33,6 +33,14 @@ export default tseslint.config(
       parserOptions: { emitDecoratorMetadata: true, experimentalDecorators: true },
     },
   },
+  {
+    // The web app runs in a browser, so it sees the DOM globals instead of Node's.
+    files: ['apps/web/**/*.{ts,tsx}'],
+    languageOptions: {
+      globals: { ...globals.browser },
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
+  },
   // Keep last: turns off rules that conflict with Prettier formatting.
   prettier,
 );
