@@ -10,7 +10,7 @@ describe('validateEnv', () => {
   it('applies defaults when optional variables are missing', () => {
     expect(validateEnv(required)).toEqual({
       NODE_ENV: 'development',
-      PORT: 3000,
+      PORT: 3100,
       LOG_LEVEL: 'info',
       ...required,
     });
