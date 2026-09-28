@@ -26,6 +26,7 @@ ledger     analytics       forecasting    goals · what-if · recommendations
 | [Engines design](docs/00-planning/02-engines-design.md) | Analytics, forecasting, goals, what-if, anomalies, recommendations, AI |
 | [Technical design](docs/00-planning/03-technical-design.md) | Database, modular monolith, background jobs, end-to-end flows |
 | [Roadmap, experiments, defense](docs/00-planning/04-roadmap-experiments-defense.md) | Academic-year plan, research experiments, demo script |
+| [Architecture decisions](docs/03-architecture/adr/) | Why the significant technical choices were made |
 | [Git & commit strategy](docs/00-planning/06-git-and-commit-strategy.md) | How the repository history is built during the year |
 | [Docs structure](docs/README.md) | How the documentation grows during the year |
 
