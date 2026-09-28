@@ -18,6 +18,7 @@ docs/
     03-technical-design.md
     04-roadmap-experiments-defense.md
     05-final-specification.md
+    06-git-and-commit-strategy.md  branching, commit conventions, per-chapter commit plan
 
   01-product/
     vision.md                      product definition, core problem, differentiator (short, stable)

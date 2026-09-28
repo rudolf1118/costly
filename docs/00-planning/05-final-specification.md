@@ -128,7 +128,11 @@ fan-out, crash recovery, dual-write) · SQL analytics, indexing and query-plan r
 forecasting fundamentals and honest evaluation · simulation design with pure functions · property-based
 and integration testing · performance measurement · (optionally) safe LLM integration.
 
-## 23. Where the backend supervisor can help most
+## 23. Development process
+Conventional Commits, short-lived feature branches merged via PR (no squash), GitHub milestones per chapter,
+a tagged release per chapter. Details are in `06-git-and-commit-strategy.md`.
+
+## 24. Where the backend supervisor can help most
 1. Reviewing the domain model and constraints before Ch1 migrations (money, transfers, recurring)
 2. Module boundaries and dependency direction: where a boundary is wrong
 3. The dirty-marking / job design: failure modes I haven't considered
