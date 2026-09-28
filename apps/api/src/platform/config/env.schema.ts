@@ -6,6 +6,8 @@ export const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   DATABASE_URL: z.url({ protocol: /^postgres(ql)?$/ }),
   REDIS_URL: z.url({ protocol: /^rediss?$/ }),
+  /** Origin of the web client. It is served separately, so it needs CORS. */
+  CORS_ORIGIN: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
 });
 
 export type Env = z.infer<typeof envSchema>;
