@@ -5,6 +5,7 @@ chapter. Code without a corresponding doc update is incomplete.
 
 ## Start here
 - [Final specification](00-planning/05-final-specification.md): what we build
+- [Architecture decisions](03-architecture/adr/): the decisions already taken, and why
 - [Supervisor specification](10-diploma/supervisor-specification.md): the project summary for the supervisor
 
 ## Structure
@@ -38,6 +39,7 @@ docs/
     api-conventions.md             errors, pagination, validation, auth, versioning
     flows.md                       the six end-to-end flows (kept current with the implementation)
     adr/
+      template.md                  copy this for a new decision record
       0001-modular-monolith.md
       0002-money-as-bigint-minor-units.md
       0003-prisma-with-raw-sql-for-analytics.md
