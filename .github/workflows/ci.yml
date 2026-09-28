@@ -2,14 +2,17 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  # A push to a branch that already has a pull request open fires both events.
+  # Keying on the branch name rather than the ref puts them in one group, so the
+  # second run cancels the first instead of duplicating the work.
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
