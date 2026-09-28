@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
+import { readApiBaseUrl } from './config';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -9,6 +10,6 @@ if (!container) {
 
 createRoot(container).render(
   <StrictMode>
-    <App />
+    <App apiBaseUrl={readApiBaseUrl(import.meta.env)} />
   </StrictMode>,
 );
