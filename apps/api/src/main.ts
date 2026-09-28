@@ -13,6 +13,9 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 
   const config = app.get<ConfigService<Env, true>>(ConfigService);
+  // The web client runs on its own origin (Vite in development, a static host later).
+  app.enableCors({ origin: config.get('CORS_ORIGIN', { infer: true }) });
+
   await app.listen(config.get('PORT', { infer: true }));
 }
 

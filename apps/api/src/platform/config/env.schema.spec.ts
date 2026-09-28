@@ -12,6 +12,7 @@ describe('validateEnv', () => {
       NODE_ENV: 'development',
       PORT: 3100,
       LOG_LEVEL: 'info',
+      CORS_ORIGIN: 'http://localhost:5173',
       ...required,
     });
   });
@@ -22,6 +23,12 @@ describe('validateEnv', () => {
 
   it('requires connection URLs', () => {
     expect(() => validateEnv({})).toThrowError(/DATABASE_URL[\s\S]*REDIS_URL/);
+  });
+
+  it('rejects a CORS origin that is not an http(s) URL', () => {
+    expect(() => validateEnv({ ...required, CORS_ORIGIN: 'localhost:5173' })).toThrow(
+      /CORS_ORIGIN/,
+    );
   });
 
   it('rejects a connection URL with the wrong protocol', () => {
