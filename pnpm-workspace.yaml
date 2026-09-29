@@ -2,7 +2,11 @@ packages:
   - 'apps/*'
   - 'packages/*'
 allowBuilds:
+  # Prisma 7 needs neither script: the client is Rust-free and the CLI fetches
+  # what it needs on demand. Verified against generate, migrate dev and deploy.
+  '@prisma/engines': false
   '@swc/core': true
   cpu-features: false
+  prisma: false
   protobufjs: false
   ssh2: false

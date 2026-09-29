@@ -14,7 +14,9 @@
     "test": "pnpm -r --if-present test",
     "build": "pnpm -r --if-present build",
     "infra:up": "docker compose up -d --wait postgres redis",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "db:generate": "pnpm --filter @costly/api db:generate",
+    "db:migrate": "pnpm --filter @costly/api db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

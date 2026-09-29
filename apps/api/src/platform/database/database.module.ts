@@ -2,15 +2,17 @@ import { Inject, Module, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Pool } from 'pg';
 import type { Env } from '../config/env.schema';
+import { PrismaService } from './prisma.service';
 
 export const PG_POOL = Symbol('PG_POOL');
 
 /**
- * PostgreSQL connection pool. For now it only backs the health check; the
- * domain modules will use the Prisma client once the schema is introduced.
+ * Database access for the whole application. The health check still runs on the
+ * raw pool; everything else goes through Prisma.
  */
 @Module({
   providers: [
+    PrismaService,
     {
       provide: PG_POOL,
       inject: [ConfigService],
@@ -22,7 +24,7 @@ export const PG_POOL = Symbol('PG_POOL');
         }),
     },
   ],
-  exports: [PG_POOL],
+  exports: [PrismaService, PG_POOL],
 })
 export class DatabaseModule implements OnApplicationShutdown {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}

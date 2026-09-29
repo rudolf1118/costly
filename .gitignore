@@ -4,5 +4,7 @@ dist/
 .env.*
 !.env.example
 coverage/
+# Prisma Client is generated from prisma/schema.prisma at install time.
+apps/api/src/generated/
 .DS_Store
 *.log
