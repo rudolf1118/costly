@@ -217,9 +217,6 @@ importers:
       nestjs-pino:
         specifier: ^5.2.0
         version: 5.2.0(@nestjs/common@12.1.0(reflect-metadata@0.2.2)(rxjs@7.8.2))(@nestjs/core@12.1.0)(pino-http@11.0.0)(pino@10.3.1)(rxjs@7.8.2)
-      pg:
-        specifier: ^8.23.0
-        version: 8.23.0
       pino:
         specifier: ^10.3.1
         version: 10.3.1
@@ -257,9 +254,6 @@ importers:
       '@types/node':
         specifier: ^24.13.6
         version: 24.13.6
-      '@types/pg':
-        specifier: ^8.23.1
-        version: 8.23.1
       '@types/supertest':
         specifier: ^7.2.1
         version: 7.2.1
