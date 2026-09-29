@@ -1,8 +1,7 @@
 import { Controller, Get, Inject } from '@nestjs/common';
 import { HealthCheck, HealthCheckService, HealthIndicatorService } from '@nestjs/terminus';
 import type { Redis } from 'ioredis';
-import type { Pool } from 'pg';
-import { PG_POOL } from '../database/database.module';
+import { PrismaService } from '../database/prisma.service';
 import { REDIS } from '../redis/redis.module';
 
 const CHECK_TIMEOUT_MS = 1500;
@@ -12,7 +11,7 @@ export class HealthController {
   constructor(
     private readonly health: HealthCheckService,
     private readonly indicators: HealthIndicatorService,
-    @Inject(PG_POOL) private readonly pool: Pool,
+    private readonly prisma: PrismaService,
     @Inject(REDIS) private readonly redis: Redis,
   ) {}
 
@@ -31,7 +30,7 @@ export class HealthController {
         this.indicators
           .check('database')
           .attempt(async () => {
-            await this.pool.query('SELECT 1');
+            await this.prisma.$queryRaw`SELECT 1`;
           })
           .withTimeout(CHECK_TIMEOUT_MS),
       () =>
