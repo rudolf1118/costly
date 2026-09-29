@@ -1,5 +1,6 @@
 pnpm-lock.yaml
 dist
 coverage
+apps/api/src/generated
 # Documentation is formatted by hand (wide tables, formulas).
 *.md
