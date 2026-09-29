@@ -20,7 +20,11 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     });
   }
 
-  /** Connects during bootstrap so an unreachable database fails at startup. */
+  /**
+   * Prisma connects on its first query, so this warms the pool during bootstrap
+   * instead. The driver adapter's pool is lazy as well, so an unreachable
+   * database does not stop the application from starting; readiness reports it.
+   */
   async onModuleInit(): Promise<void> {
     await this.$connect();
   }
