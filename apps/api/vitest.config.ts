@@ -15,6 +15,14 @@ export default defineConfig({
       // IP; the rate limit suites turn it back on.
       AUTH_RATE_LIMIT: 'off',
     },
+    // Each integration test file starts its own PostgreSQL and Redis
+    // containers. With one worker per core (9 here) all eight such files start
+    // about 14 containers at once, and Docker Desktop then sometimes misses
+    // Testcontainers' 10 s port-binding deadline: 2 of 20 full runs failed
+    // (the cause captured for one was that timeout), 0 of 20 with four
+    // workers, which were also faster (about 19 s against 27 s). GitHub's
+    // 4-vCPU runners use 3 workers anyway.
+    maxWorkers: 4,
     // Integration tests start PostgreSQL and Redis containers (Testcontainers).
     hookTimeout: 120_000,
     testTimeout: 15_000,
