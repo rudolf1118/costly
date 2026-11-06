@@ -84,6 +84,8 @@ describe('health endpoints', () => {
 
     expect(res.body.status).toBe('error');
     expect(res.body.error.database.status).toBe('down');
+    // Names the driver's reason, e.g. ECONNREFUSED, not Prisma's empty message.
+    expect(res.body.error.database.message).toMatch(/^database query failed \([A-Z0-9_]+\)$/);
   });
 
   it('GET /health/live still responds while both dependencies are down', async () => {

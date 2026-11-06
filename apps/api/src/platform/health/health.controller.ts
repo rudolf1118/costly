@@ -6,6 +6,17 @@ import { REDIS } from '../redis/redis.module';
 
 const CHECK_TIMEOUT_MS = 1500;
 
+/**
+ * Prisma 7 driver-adapter errors keep the cause in `code` (ECONNREFUSED,
+ * 28P01, ...) and leave the message empty, so readiness would report a failure
+ * without saying why. Only the code is exposed, never connection details.
+ */
+function databaseFailure(error: unknown): Error {
+  const code =
+    typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : '';
+  return new Error(code ? `database query failed (${code})` : 'database query failed');
+}
+
 @Controller('health')
 export class HealthController {
   constructor(
@@ -30,7 +41,11 @@ export class HealthController {
         this.indicators
           .check('database')
           .attempt(async () => {
-            await this.prisma.$queryRaw`SELECT 1`;
+            try {
+              await this.prisma.$queryRaw`SELECT 1`;
+            } catch (error) {
+              throw databaseFailure(error);
+            }
           })
           .withTimeout(CHECK_TIMEOUT_MS),
       () =>
