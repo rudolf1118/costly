@@ -35,19 +35,22 @@ export class AuthenticationService implements OnModuleInit {
   /**
    * Checks credentials and starts a session. A wrong password and an unknown
    * email give the same 401 after the same amount of hashing work, so neither
-   * the response nor its timing reveals whether the account exists. The
-   * account's failure budget is checked first, before any hashing; unknown
-   * emails have one too, so a 429 doesn't reveal existence either. A client
-   * that has logged in to this account before skips that budget, so an
-   * attacker's failures can't lock the owner out; per-IP limits still apply.
+   * the response nor its timing reveals whether the account exists.
+   *
+   * Before any hashing, the attempt reserves one unit of the account's failure
+   * budget with an atomic increment, so concurrent guesses cannot all pass a
+   * check before any of them is counted; a success gives the unit back, so
+   * only failures count. Unknown emails have a budget too, so a 429 doesn't
+   * reveal existence. A client that has logged in to this account before
+   * skips the budget, so an attacker's failures can't lock the owner out;
+   * per-IP limits still apply.
    *
    * @param client the caller's rate-limit identity (rateLimitSubject)
    */
   async login(email: string, password: string, client: string): Promise<SessionTokens> {
     const keys = loginKeys(email, client);
-    if (!(await this.limiter.isMarked(keys.knownClient))) {
-      await this.limiter.ensureBelow(keys.failures, LOGIN_FAILURES_PER_ACCOUNT);
-    }
+    const knownClient = await this.limiter.isMarked(keys.knownClient);
+    if (!knownClient) await this.limiter.consume(keys.failures, LOGIN_FAILURES_PER_ACCOUNT);
     // citext: the lookup ignores case, as uniqueness does.
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -55,9 +58,11 @@ export class AuthenticationService implements OnModuleInit {
     });
     const matches = await verifyPassword(user?.passwordHash ?? this.dummyHash, password);
     if (!user || !matches) {
-      await this.limiter.hit(keys.failures, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
+      // A known client reserved nothing, but its failures still count.
+      if (knownClient) await this.limiter.hit(keys.failures, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
       throw new UnauthorizedException('Invalid email or password.');
     }
+    if (!knownClient) await this.limiter.refund(keys.failures);
     await this.limiter.mark(keys.knownClient, KNOWN_CLIENT_TTL_MS);
     return this.startSession(user.id);
   }

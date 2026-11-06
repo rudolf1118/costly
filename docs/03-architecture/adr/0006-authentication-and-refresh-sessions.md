@@ -2,8 +2,8 @@
 
 Status: Accepted
 Date: 2026-11-06 (amended 2026-11-06 by the PR #4 security audit: session lock, concurrent-refresh
-grace window, IPv6 /64 client identity, known clients exempt from the account limit. Each change
-is marked "Amended".)
+grace window, IPv6 /64 client identity, known clients exempt from the account limit, atomic
+reservation of the account budget. Each change is marked "Amended".)
 
 ## Context
 
@@ -88,6 +88,11 @@ every key has a TTL. Limits are checked before any Argon2id work:
 The account key is the SHA-256 of the trimmed, lower-cased email, so no address is stored in Redis,
 and no password or token ever is. Exceeding a limit gives 429 with `Retry-After`. If Redis is
 unavailable, these endpoints answer 503 instead of running unlimited.
+
+*Amended:* the account budget is **reserved atomically before verification**. Each attempt first
+increments the account's failure counter, and a success gives the unit back. Checking the count
+and recording the failure only after verification let concurrent guesses all pass the check: 30
+simultaneous guesses from 30 IPs were all verified against a cap of 10.
 
 **Client IP.** Express's `req.ip` with `trust proxy` set from `TRUST_PROXY`: the number of proxy
 hops, default 0. With 0, `X-Forwarded-For` is ignored and the socket address is used. Behind one

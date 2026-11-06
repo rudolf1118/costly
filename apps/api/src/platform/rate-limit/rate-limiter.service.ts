@@ -43,7 +43,15 @@ local count = redis.call('INCR', KEYS[1])
 if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
 return { count, redis.call('PTTL', KEYS[1]) }`;
 
-const PEEK = `return { tonumber(redis.call('GET', KEYS[1]) or '0'), redis.call('PTTL', KEYS[1]) }`;
+/**
+ * Gives back one hit, only while the window still exists (so an expired key
+ * is never recreated without a TTL) and never below zero. DECR keeps the TTL.
+ */
+const REFUND = `
+if redis.call('EXISTS', KEYS[1]) == 1 and tonumber(redis.call('GET', KEYS[1])) > 0 then
+  redis.call('DECR', KEYS[1])
+end
+return { 0, 0 }`;
 
 const MARK = `redis.call('SET', KEYS[1], '1', 'PX', ARGV[1]) return { 1, 0 }`;
 
@@ -86,11 +94,13 @@ export class RateLimiter {
     return this.run(HIT, key, String(windowMs));
   }
 
-  /** Throws 429 if the key has already reached its limit, without counting. */
-  async ensureBelow(key: string, rule: RateLimit): Promise<void> {
+  /**
+   * Returns a hit taken by consume() for an attempt that turned out not to
+   * count, such as a successful login against a failures budget.
+   */
+  async refund(key: string): Promise<void> {
     if (!this.enabled) return;
-    const state = await this.run(PEEK, key);
-    if (state.count >= rule.limit) throw new RateLimitExceededException(state.retryAfterMs);
+    await this.run(REFUND, key);
   }
 
   /** Records a fact for `ttlMs`, such as a client known to an account. */

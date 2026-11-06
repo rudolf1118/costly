@@ -189,6 +189,22 @@ describe('authentication rate limits', () => {
       expect(verifyPassword).not.toHaveBeenCalled();
     });
 
+    it('holds the account limit under a burst of concurrent guesses from many IPs', async () => {
+      const email = await newAccount();
+      vi.mocked(verifyPassword).mockClear();
+
+      const responses = await Promise.all(
+        Array.from({ length: 30 }, () =>
+          post('/auth/login', newClient()).send({ email, password: 'a guess' }),
+        ),
+      );
+
+      // At most ten guesses may be checked against the password, however they arrive.
+      expect(verifyPassword).toHaveBeenCalledTimes(10);
+      expect(responses.filter((res) => res.status === 401)).toHaveLength(10);
+      expect(responses.filter((res) => res.status === 429)).toHaveLength(20);
+    });
+
     it('treats an unknown email the same way, so a 429 reveals nothing', async () => {
       const unknown = `nobody-${randomUUID()}@costly.test`;
       for (let i = 0; i < 10; i++) {
