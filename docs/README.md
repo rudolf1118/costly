@@ -53,6 +53,7 @@ docs/
     schema-overview.md             ER diagram per domain (core, analytics, forecasting, insights)
     tables/                        one short file per domain: purpose, fields, constraints, indexes
     derived-data-policy.md         what is stored vs. calculated, and why
+    migrations.md                  how migrations are created, applied and tested
     migrations-log.md              notable migrations and data backfills
 
   05-analytics/

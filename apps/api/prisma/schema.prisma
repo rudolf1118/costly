@@ -1,0 +1,15 @@
+// Costly's database schema. Domain models arrive with the modules that own
+// them (ADR-0003: Prisma for persistence, raw SQL for analytics).
+
+generator client {
+  provider            = "prisma-client"
+  output              = "../src/generated/prisma"
+  // The API is a CommonJS NestJS app compiled by tsc with node10 resolution,
+  // which cannot read the ESM defaults: import.meta or ".ts" import suffixes.
+  moduleFormat        = "cjs"
+  importFileExtension = ""
+}
+
+datasource db {
+  provider = "postgresql"
+}
