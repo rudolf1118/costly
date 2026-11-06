@@ -16,7 +16,8 @@
     "infra:up": "docker compose up -d --wait postgres redis",
     "infra:down": "docker compose down",
     "db:generate": "pnpm --filter @costly/api db:generate",
-    "db:migrate": "pnpm --filter @costly/api db:migrate"
+    "db:migrate": "pnpm --filter @costly/api db:migrate",
+    "db:deploy": "pnpm --filter @costly/api db:deploy"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
