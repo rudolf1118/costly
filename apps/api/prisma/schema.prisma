@@ -13,3 +13,21 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+// identity: the person whose financial data every other table belongs to.
+// Constraints Prisma cannot express (the citext extension and CHECKs) are
+// written into the migration SQL; see docs/04-database/tables/identity.md.
+model User {
+  id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// citext: unique regardless of case, stored as the user typed it.
+  email        String   @unique @db.Citext
+  /// A password hash only, never the password. The algorithm is chosen with registration.
+  passwordHash String   @map("password_hash")
+  /// ISO 4217 code. v1 supports a single currency (ADR-0002).
+  baseCurrency String   @default("AMD") @map("base_currency") @db.Char(3)
+  /// IANA time zone name, e.g. Asia/Yerevan. Decides which month a transaction falls in.
+  timezone     String
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@map("users")
+}
