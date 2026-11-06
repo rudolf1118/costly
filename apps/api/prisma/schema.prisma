@@ -29,5 +29,32 @@ model User {
   timezone     String
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
+  refreshTokens RefreshToken[]
+
   @@map("users")
+}
+
+// identity: one row per refresh credential. A family is one login session;
+// rotation adds a row to it. The partial unique index (one active token per
+// family) and the CHECKs live in the migration SQL; see ADR-0006 and
+// docs/04-database/tables/identity.md.
+model RefreshToken {
+  id        String    @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  /// Shared by all tokens of one session; new at login, inherited on rotation.
+  familyId  String    @default(dbgenerated("uuidv7()")) @map("family_id") @db.Uuid
+  /// SHA-256 hex digest of the token. The token itself is never stored.
+  tokenHash String    @unique @map("token_hash") @db.Char(64)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  /// The session's absolute expiry, copied to every token of the family.
+  expiresAt DateTime  @map("expires_at") @db.Timestamptz(3)
+  /// Set when the token was exchanged for its successor; using it again is reuse.
+  rotatedAt DateTime? @map("rotated_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@map("refresh_tokens")
 }

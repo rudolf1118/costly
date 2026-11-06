@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module';
 import { HealthController } from './health/health.controller';
 import { ProblemDetailsFilter } from './http/problem-details.filter';
 import { LoggingModule } from './logging/logging.module';
+import { RateLimitModule } from './rate-limit/rate-limit.module';
 import { RedisModule } from './redis/redis.module';
 
 /**
@@ -19,6 +20,7 @@ import { RedisModule } from './redis/redis.module';
     LoggingModule,
     DatabaseModule,
     RedisModule,
+    RateLimitModule,
     TerminusModule.forRoot({ logger: false }),
   ],
   controllers: [HealthController],

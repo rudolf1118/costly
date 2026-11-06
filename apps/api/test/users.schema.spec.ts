@@ -4,6 +4,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { applyMigrations } from './support/migrations';
+import { violation } from './support/postgres';
 
 /**
  * Verifies the users table as PostgreSQL enforces it. Violations are provoked
@@ -30,29 +31,6 @@ describe('users table', () => {
   /** A unique address per call, so tests never collide whatever their order. */
   function uniqueEmail(): string {
     return `user-${randomUUID()}@costly.test`;
-  }
-
-  /** Runs a statement that must fail and returns PostgreSQL's SQLSTATE and message. */
-  async function violation(
-    statement: Promise<unknown>,
-  ): Promise<{ code: string; message: string }> {
-    try {
-      await statement;
-    } catch (error) {
-      // Prisma 7 driver adapters pass PostgreSQL's error through unchanged here.
-      const cause = (
-        error as {
-          meta?: {
-            driverAdapterError?: { cause?: { originalCode?: string; originalMessage?: string } };
-          };
-        }
-      ).meta?.driverAdapterError?.cause;
-      if (cause?.originalCode) {
-        return { code: cause.originalCode, message: cause.originalMessage ?? '' };
-      }
-      throw error;
-    }
-    throw new Error('expected the statement to be rejected by PostgreSQL');
   }
 
   function insert(email: string, passwordHash = 'hash', timezone = 'Asia/Yerevan') {

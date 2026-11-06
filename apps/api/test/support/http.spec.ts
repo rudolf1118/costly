@@ -1,10 +1,11 @@
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { Controller, Get, type INestApplication, Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { listenOnLoopback } from './http';
+import { startHttpServer } from './http';
 
 @Controller('ping')
 class PingController {
@@ -14,11 +15,12 @@ class PingController {
   }
 }
 
-@Module({ controllers: [PingController] })
+// ConfigModule because startHttpServer reads the CORS origin from configuration.
+@Module({ imports: [ConfigModule.forRoot({ ignoreEnvFile: true })], controllers: [PingController] })
 class PingModule {}
 
-/** Regression cover for the intermittent e2e failures of task 3 (see listenOnLoopback). */
-describe('listenOnLoopback', () => {
+/** Regression cover for the intermittent e2e failures of task 3 (see startHttpServer). */
+describe('startHttpServer', () => {
   let app: INestApplication;
   let decoy: Server;
 
@@ -32,7 +34,7 @@ describe('listenOnLoopback', () => {
 
     const moduleRef = await Test.createTestingModule({ imports: [PingModule] }).compile();
     app = moduleRef.createNestApplication();
-    await listenOnLoopback(app);
+    await startHttpServer(app);
   });
 
   afterAll(async () => {
