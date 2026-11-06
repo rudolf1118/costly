@@ -408,6 +408,14 @@ describe('authentication', () => {
       expect(refreshCookie(res)).toMatch(/Expires=Thu, 01 Jan 1970/);
     });
 
+    it('rejects a refresh after the account was deleted, whose sessions went with it', async () => {
+      const account = await newAccount();
+      const token = await session(account);
+      await prisma.user.delete({ where: { id: account.id } });
+
+      expect((await refresh(token).expect(401)).body).toEqual(invalidSession);
+    });
+
     it('rejects an access token sent as the refresh cookie', async () => {
       const account = await newAccount();
       const accessToken = (await login({ email: account.email, password: PASSWORD })).body
@@ -511,6 +519,42 @@ describe('authentication', () => {
       await logout(token).set('Origin', 'https://evil.example').expect(403);
 
       await refresh(token).expect(200);
+    });
+  });
+
+  describe('Origin checks on the cookie endpoints', () => {
+    it.each([
+      ['an opaque origin (sandboxed iframe, file:)', 'null'],
+      ['a malformed origin', 'not a url'],
+      ['a same-site page on another port', 'http://localhost:3000'],
+      ['the trusted host over another scheme', 'https://localhost:5173'],
+      ['a lookalike subdomain', 'http://localhost:5173.evil.example'],
+    ])('refuses refresh and logout from %s', async (_case, origin) => {
+      const token = await session(await newAccount());
+
+      await refresh(token).set('Origin', origin).expect(403);
+      await logout(token).set('Origin', origin).expect(403);
+
+      // Neither request touched the session.
+      await refresh(token).expect(200);
+    });
+
+    it('grants a credentialed preflight only to the web client', async () => {
+      const preflight = (origin: string) =>
+        http()
+          .options('/auth/refresh')
+          .set('Origin', origin)
+          .set('Access-Control-Request-Method', 'POST');
+
+      const trusted = await preflight('http://localhost:5173');
+      const foreign = await preflight('https://evil.example');
+
+      expect(trusted.headers['access-control-allow-origin']).toBe('http://localhost:5173');
+      expect(trusted.headers['access-control-allow-credentials']).toBe('true');
+      // The allowed origin is fixed, never reflected: a browser on another
+      // origin sees an ACAO that doesn't match it and blocks the response.
+      expect(foreign.headers['access-control-allow-origin']).not.toBe('https://evil.example');
+      expect(foreign.headers['access-control-allow-origin']).toBe('http://localhost:5173');
     });
   });
 
@@ -652,6 +696,33 @@ describe('authentication', () => {
 
       await rejected(`Bearer ${token}`);
     });
+
+    it('rejects a signed token whose payload was altered', async () => {
+      const [account, victim] = await Promise.all([newAccount(), newAccount()]);
+      const [header, payload, signature] = (await accessTokenFor(account)).split('.');
+      const claims = JSON.parse(Buffer.from(payload ?? '', 'base64url').toString()) as object;
+      const altered = Buffer.from(JSON.stringify({ ...claims, sub: victim.id })).toString(
+        'base64url',
+      );
+
+      await rejected(`Bearer ${header}.${altered}.${signature}`);
+    });
+
+    it.each([
+      ['HEAD', '/auth/me'],
+      ['GET', '/AUTH/ME'],
+      ['GET', '/auth/me/'],
+    ])(
+      'applies the guard to %s %s, which Express routes to the same handler',
+      async (method, path) => {
+        const account = await newAccount();
+        const token = await accessTokenFor(account);
+        const call = () => (method === 'HEAD' ? http().head(path) : http().get(path));
+
+        await call().expect(401);
+        await call().set('Authorization', `Bearer ${token}`).expect(200);
+      },
+    );
 
     it('rejects a refresh token used as an access token', async () => {
       const account = await newAccount();

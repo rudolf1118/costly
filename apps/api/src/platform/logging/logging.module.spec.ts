@@ -44,6 +44,19 @@ describe('request log redaction', () => {
     expect(line).not.toContain(secret);
   });
 
+  it('redacts Set-Cookie when the response sets several cookies', () => {
+    const multiple = logLine({
+      res: {
+        headers: {
+          'set-cookie': ['costly_refresh=first-secret; Path=/auth', 'other=second-secret'],
+        },
+      },
+    });
+
+    expect(multiple).not.toContain('first-secret');
+    expect(multiple).not.toContain('second-secret');
+  });
+
   it('keeps the rest of the request and response for diagnosis', () => {
     expect(line).toContain('curl/8');
     expect(line).toContain('application/json');
