@@ -134,6 +134,31 @@ describe('authentication rate limits', () => {
     });
   });
 
+  describe('client addresses', () => {
+    it('gives a whole IPv6 /64 one budget, so rotating addresses inside it gains nothing', async () => {
+      // Any IPv6 subscriber controls a /64: 2^64 addresses.
+      for (let i = 1; i <= 5; i++) {
+        await post('/auth/register', `2001:db8:feed:${ipCounter}::${i.toString(16)}`)
+          .send({})
+          .expect(400);
+      }
+
+      expectTooManyRequests(
+        await post('/auth/register', `2001:db8:feed:${ipCounter}:ffff:ffff:ffff:ffff`).send({}),
+      );
+      // A different /64 is a different client.
+      await post('/auth/register', `2001:db8:beef:${ipCounter}::1`).send({}).expect(400);
+      ipCounter += 1;
+    });
+
+    it('treats an IPv4-mapped IPv6 address as the IPv4 address it maps', async () => {
+      const ip = newClient();
+      for (let i = 0; i < 5; i++) await post('/auth/register', `::ffff:${ip}`).send({}).expect(400);
+
+      expectTooManyRequests(await post('/auth/register', ip).send({}));
+    });
+  });
+
   describe('POST /auth/login', () => {
     it('answers the eleventh request from one IP with 429, before verifying the password', async () => {
       const email = await newAccount();
@@ -237,6 +262,6 @@ describe('authentication rate limits', () => {
     expect(everything).not.toContain('@');
     expect(everything).not.toContain(PASSWORD);
     expect(everything).not.toContain(login.body.accessToken);
-    expect(keys.every((key) => /^ratelimit:[a-z-]+:(ip|account):[\w.:-]+$/.test(key))).toBe(true);
+    expect(keys.every((key) => /^ratelimit:[a-z-]+:(ip|account):[\w.:/-]+$/.test(key))).toBe(true);
   });
 });

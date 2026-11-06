@@ -191,6 +191,8 @@ Redis fixed windows of 15 minutes, checked before validation and before any Argo
 - **Redis unavailable** (not connected, or slower than 500 ms): `503` "This service is temporarily
   unavailable. Try again later." The limits fail closed.
 - **Unaffected by a Redis outage:** issued access tokens and logout.
+- **Client identity:** the per-IP budget belongs to an IPv4 address, or to an IPv6 **/64**
+  network, since one subscriber holds a whole /64. IPv4-mapped IPv6 counts as its IPv4 address.
 
 ## Deployment requirements
 

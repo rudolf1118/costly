@@ -2,7 +2,7 @@
 
 Status: Accepted
 Date: 2026-11-06 (amended 2026-11-06 by the PR #4 security audit: session lock, concurrent-refresh
-grace window. Each change is marked "Amended".)
+grace window, IPv6 /64 client identity. Each change is marked "Amended".)
 
 ## Context
 
@@ -91,6 +91,15 @@ unavailable, these endpoints answer 503 instead of running unlimited.
 **Client IP.** Express's `req.ip` with `trust proxy` set from `TRUST_PROXY`: the number of proxy
 hops, default 0. With 0, `X-Forwarded-For` is ignored and the socket address is used. Behind one
 reverse proxy that overwrites `X-Forwarded-For`, production sets `TRUST_PROXY=1`.
+
+*Amended:* the address is reduced to a client identity before it becomes part of a key:
+- IPv4 stays as is;
+- IPv4-mapped IPv6 becomes its IPv4 address;
+- IPv6 becomes its **/64** prefix;
+- anything unparsable lands in one shared `invalid` bucket.
+
+Every IPv6 subscriber controls a whole /64, so keying on the full address let one client use a
+fresh address, and a fresh budget, for every request.
 
 **Test switch.** `AUTH_RATE_LIMIT=off` disables the limits for test suites about other behaviour.
 Configuration validation rejects it in production.
