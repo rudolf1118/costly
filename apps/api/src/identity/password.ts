@@ -36,14 +36,31 @@ export function normalizePassword(password: string): string {
   return password.normalize('NFKC');
 }
 
+/**
+ * A lone surrogate (JSON can carry "\ud800") is not text. Encoding to UTF-8
+ * replaces it with U+FFFD, so "pw\uD800", "pw\uDBFF" and "pw\uFFFD" would
+ * otherwise all produce and match the same hash. With the u flag, \p{Cs}
+ * matches only unpaired surrogates; paired ones form a single code point.
+ */
+const UNPAIRED_SURROGATE = /\p{Cs}/u;
+
+export function hasUnpairedSurrogate(password: string): boolean {
+  return UNPAIRED_SURROGATE.test(password);
+}
+
 export function passwordLength(password: string): number {
   return [...normalizePassword(password)].length;
 }
 
-export function hashPassword(password: string): Promise<string> {
+export async function hashPassword(password: string): Promise<string> {
+  // Validation rejects these first; this guards any other caller.
+  if (hasUnpairedSurrogate(password)) {
+    throw new Error('refusing to hash a password with an unpaired surrogate');
+  }
   return hash(normalizePassword(password), ARGON2_OPTIONS);
 }
 
-export function verifyPassword(passwordHash: string, password: string): Promise<boolean> {
+export async function verifyPassword(passwordHash: string, password: string): Promise<boolean> {
+  if (hasUnpairedSurrogate(password)) return false;
   return verify(passwordHash, normalizePassword(password));
 }

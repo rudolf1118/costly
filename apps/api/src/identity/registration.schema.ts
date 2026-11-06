@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, passwordLength } from './password';
+import {
+  hasUnpairedSurrogate,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  passwordLength,
+} from './password';
 
 /** The longest address SMTP accepts; the users table enforces the same limit. */
 const EMAIL_MAX_LENGTH = 254;
@@ -27,6 +32,9 @@ export const registerSchema = z.strictObject({
   // Never trimmed: spaces are legitimate password characters.
   password: z
     .string()
+    .refine((password) => !hasUnpairedSurrogate(password), {
+      error: 'Must be valid Unicode text',
+    })
     .refine((password) => passwordLength(password) >= PASSWORD_MIN_LENGTH, {
       error: `Must be at least ${PASSWORD_MIN_LENGTH} characters`,
     })

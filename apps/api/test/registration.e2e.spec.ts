@@ -200,6 +200,7 @@ describe('POST /auth/register', () => {
       ['7 characters', 'abcdefg'],
       ['4 emoji, 8 UTF-16 units but 4 characters', '🙂🙂🙂🙂'],
       ['more than 128 characters', 'p'.repeat(129)],
+      ['an unpaired surrogate', 'long enough \uD800 password'],
       ['not a string', 12345678],
     ])('rejects a password of %s', async (_case, password) => {
       expect(await rejectedFields(validBody({ password }))).toEqual(['password']);
