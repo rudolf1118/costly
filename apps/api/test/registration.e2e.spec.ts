@@ -267,6 +267,47 @@ describe('POST /auth/register', () => {
     });
   });
 
+  describe('bodies the JSON parser refuses', () => {
+    function post(headers: Record<string, string>, body: string | Buffer) {
+      const req = request(app.getHttpServer()).post('/auth/register');
+      for (const [name, value] of Object.entries(headers)) req.set(name, value);
+      return req.send(body);
+    }
+
+    it.each([
+      [
+        'larger than the 100 kB body limit',
+        { 'Content-Type': 'application/json' },
+        JSON.stringify({ ...validBody(), password: 'x'.repeat(200_000) }),
+        413,
+      ],
+      [
+        'in an unsupported charset',
+        { 'Content-Type': 'application/json; charset=klingon' },
+        '{}',
+        415,
+      ],
+      [
+        'in an unsupported content encoding',
+        { 'Content-Type': 'application/json', 'Content-Encoding': 'br2' },
+        '{}',
+        415,
+      ],
+      [
+        'declared as gzip but not gzipped',
+        { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' },
+        '{}',
+        400,
+      ],
+    ])('answers a body %s with its client error status', async (_case, headers, body, status) => {
+      const res = await post(headers, body).expect(status);
+
+      expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+      expect(res.body).toMatchObject({ type: 'about:blank', status });
+      expect(res.body.detail).toBeUndefined();
+    });
+  });
+
   it('answers an unknown route with problem details', async () => {
     const res = await request(app.getHttpServer()).post('/auth/nope').send({}).expect(404);
 

@@ -129,6 +129,31 @@ describe('ProblemDetailsFilter', () => {
     expect(JSON.stringify(log.mock.calls)).toContain('ECONNREFUSED');
   });
 
+  it('answers a body parser client error with its own status, unlogged', () => {
+    const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { sent, host } = capture();
+    // The shape of an http-errors object, as raised by body-parser.
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      expose: true,
+      type: 'entity.too.large',
+    });
+
+    filter.catch(tooLarge, host);
+
+    expect(sent.body).toEqual({ type: 'about:blank', title: 'Payload Too Large', status: 413 });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it('still treats an error marked as not exposable as a server error', () => {
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const { sent, host } = capture();
+
+    filter.catch(Object.assign(new Error('internal'), { status: 400, expose: false }), host);
+
+    expect(sent.status).toBe(500);
+  });
+
   it('logs a Prisma error by class and code only, never its message', () => {
     const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { sent, host } = capture();

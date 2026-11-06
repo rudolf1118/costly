@@ -50,9 +50,29 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       return;
     }
 
+    const clientStatus = exposedClientErrorStatus(exception);
+    if (clientStatus !== undefined) {
+      send(response, problem(clientStatus));
+      return;
+    }
+
     this.logger.error({ msg: 'unhandled exception', error: describeForLog(exception) });
     send(response, problem(HttpStatus.INTERNAL_SERVER_ERROR));
   }
+}
+
+/**
+ * The body parser rejects some requests itself: too large (413), an
+ * unsupported charset or content encoding (415), a body it cannot decode
+ * (400). It raises http-errors objects, not HttpExceptions, and marks client
+ * errors with expose: true. Only the status is used, because the messages
+ * repeat request header values.
+ */
+function exposedClientErrorStatus(error: unknown): number | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const { status, expose } = error as { status?: unknown; expose?: unknown };
+  const isClientError = typeof status === 'number' && status >= 400 && status < 500;
+  return expose === true && isClientError ? status : undefined;
 }
 
 function send(response: Response, body: ProblemDetails): void {
