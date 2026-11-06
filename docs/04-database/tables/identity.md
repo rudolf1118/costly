@@ -97,10 +97,14 @@ refresh adds the successor token to it (ADR-0006). Introduced by migration
 ### How rows change
 
 - **Login** inserts a token in a new family.
-- **Refresh** runs one transaction. A conditional `UPDATE ... SET rotated_at = now()` succeeds
-  only for an unrotated, unrevoked, unexpired token, then the successor is inserted. A failure
-  rolls back both.
-- **Reuse** (an already rotated token) sets `revoked_at` on the whole family.
+- **Refresh, reuse revocation and logout** each run in one transaction that first takes the
+  family's advisory lock (`pg_advisory_xact_lock`). Writes to one session therefore never
+  interleave, and a revocation always sees the successor of a rotation that was in flight.
+- **Refresh:** a conditional `UPDATE ... SET rotated_at = now()` succeeds only for an unrotated,
+  unrevoked, unexpired token, then the successor is inserted. A failure rolls back both.
+- **A token rotated less than 10 seconds ago**, in a live session, is a concurrent duplicate:
+  nothing changes, and the request gets 409.
+- **Reuse** (a token rotated earlier than that) sets `revoked_at` on the whole family.
 - **Logout** sets `revoked_at` on the whole family.
 
 Rows are never deleted by the application. Expired and revoked rows are removed by a cleanup job
@@ -109,4 +113,6 @@ planned with the Chapter 2 background-processing work.
 ### Tests
 
 `apps/api/test/refresh-tokens.schema.spec.ts` tests each constraint against a fresh container.
-`apps/api/test/authentication.e2e.spec.ts` covers the row changes above through the API.
+`apps/api/test/authentication.e2e.spec.ts` covers the row changes above through the API, and
+`apps/api/test/refresh-races.e2e.spec.ts` forces the logout-versus-refresh and
+replay-versus-rotation interleavings with a held row lock.
