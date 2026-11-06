@@ -8,6 +8,17 @@ import type { Env } from '../config/env.schema';
 const REQUEST_ID_HEADER = 'x-request-id';
 
 /**
+ * Headers that carry credentials, removed from every request log line:
+ * access tokens (Authorization), the refresh cookie the client sends
+ * (Cookie) and the one the API sets (Set-Cookie, ADR-0006).
+ */
+export const LOG_REDACT_PATHS = [
+  'req.headers.authorization',
+  'req.headers.cookie',
+  'res.headers["set-cookie"]',
+];
+
+/**
  * Structured JSON logs (pretty-printed in development). Every request gets a
  * request id, taken from the incoming x-request-id header or generated, so a
  * request can be followed across log lines and, later, into background jobs.
@@ -28,7 +39,7 @@ const REQUEST_ID_HEADER = 'x-request-id';
             autoLogging: {
               ignore: (req: IncomingMessage) => req.url?.startsWith('/health') ?? false,
             },
-            redact: ['req.headers.authorization', 'req.headers.cookie'],
+            redact: LOG_REDACT_PATHS,
             transport:
               nodeEnv === 'development'
                 ? { target: 'pino-pretty', options: { singleLine: true } }
