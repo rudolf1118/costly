@@ -49,6 +49,7 @@ The API integration tests start a throwaway PostgreSQL container and run
 | Migration | Creates | Documented in |
 |---|---|---|
 | `20261106063035_add_users` | `citext` extension, `users` table | [`tables/identity.md`](tables/identity.md) |
+| `20261106121230_add_refresh_tokens` | `refresh_tokens` table | [`tables/identity.md`](tables/identity.md#refresh_tokens) |
 
 An existing local database needs `pnpm db:deploy`, or `pnpm db:migrate` while developing, before
 the API sees new tables.

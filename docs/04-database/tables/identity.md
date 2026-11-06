@@ -55,11 +55,58 @@ surrounding whitespace rather than silently removing it.
   together with the first operation that changes a user.
 - **Soft delete / `archived_at`:** the specification reserves soft delete for accounts and
   categories.
-- **Roles, profile fields, email verification, sessions:** out of scope. Refresh tokens are
-  their own table and arrive with authentication.
+- **Roles, profile fields, email verification:** out of scope. Sessions are the
+  `refresh_tokens` table below.
 
 ### Tests
 
 `apps/api/test/users.schema.spec.ts` applies the migrations to a fresh PostgreSQL 18 container
 and checks each rule as PostgreSQL enforces it. Violations are provoked with raw SQL and matched
 on SQLSTATE (`23505` unique, `23514` check, `23502` not null) and on the constraint name.
+
+## `refresh_tokens`
+
+One row per refresh credential. A **family** is one login session: login creates it, and every
+refresh adds the successor token to it (ADR-0006). Introduced by migration
+`20261106121230_add_refresh_tokens` (Chapter 1, task 4).
+
+### Columns
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` | |
+| `user_id` | `uuid` | no | — | References `users.id`, `ON DELETE CASCADE`. |
+| `family_id` | `uuid` | no | `uuidv7()` | The session. New at login (the database generates it); copied on rotation. |
+| `token_hash` | `char(64)` | no | — | SHA-256 hex digest of the token. The token itself is never stored. |
+| `created_at` | `timestamptz(3)` | no | `CURRENT_TIMESTAMP` | |
+| `expires_at` | `timestamptz(3)` | no | — | The session's absolute expiry, 30 days after login, copied to every successor. |
+| `rotated_at` | `timestamptz(3)` | yes | — | Set when the token is exchanged for its successor. Presenting it again is reuse. |
+| `revoked_at` | `timestamptz(3)` | yes | — | Set by logout and by reuse detection, for the whole family. |
+
+### Constraints and indexes
+
+| Name | Rule | Why |
+|---|---|---|
+| `refresh_tokens_token_hash_key` | unique `token_hash` | Lookup by digest; two tokens can't share one. |
+| `refresh_tokens_one_active_per_family` | unique `family_id` where `rotated_at IS NULL AND revoked_at IS NULL` | At most one usable token per session, so PostgreSQL itself refuses a second successful rotation of a credential. |
+| `refresh_tokens_token_hash_format_check` | `token_hash ~ '^[0-9a-f]{64}$'` | Only digests can be stored, never a raw token. |
+| `refresh_tokens_expires_after_creation_check` | `expires_at > created_at` | |
+| `refresh_tokens_user_id_idx`, `refresh_tokens_family_id_idx` | indexes | Revoking a family; future per-user cleanup. |
+| `refresh_tokens_user_id_fkey` | `ON DELETE CASCADE` | An exception to the RESTRICT default: a session means nothing without its user and holds no financial history. |
+
+### How rows change
+
+- **Login** inserts a token in a new family.
+- **Refresh** runs one transaction. A conditional `UPDATE ... SET rotated_at = now()` succeeds
+  only for an unrotated, unrevoked, unexpired token, then the successor is inserted. A failure
+  rolls back both.
+- **Reuse** (an already rotated token) sets `revoked_at` on the whole family.
+- **Logout** sets `revoked_at` on the whole family.
+
+Rows are never deleted by the application. Expired and revoked rows are removed by a cleanup job
+planned with the Chapter 2 background-processing work.
+
+### Tests
+
+`apps/api/test/refresh-tokens.schema.spec.ts` tests each constraint against a fresh container.
+`apps/api/test/authentication.e2e.spec.ts` covers the row changes above through the API.

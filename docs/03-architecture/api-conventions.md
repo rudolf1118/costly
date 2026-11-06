@@ -1,8 +1,7 @@
 # API conventions
 
-How the HTTP API behaves for every endpoint. Covers what exists so far: errors and request
-validation. Pagination, authentication and versioning are added with the first endpoints that
-need them.
+How the HTTP API behaves for every endpoint: errors, request validation, authentication and rate
+limiting. Pagination and versioning are added with the first endpoints that need them.
 
 ## Errors: RFC 9457 problem details
 
@@ -99,9 +98,106 @@ Responses:
 Duplicate emails are decided by the unique index on `users.email`, not by a lookup before the
 insert, so concurrent registrations of the same address produce exactly one account.
 
-**Not rate-limited yet.** Every accepted request costs one Argon2id hash: 64 MiB for about 30 ms.
-The 100 kB body limit and validation, which runs before hashing, bound the cost of a single
-request but not the number of requests. Costly runs locally for now, so this is accepted for
-registration. Rate limiting is planned together with login (task 4): one Redis-backed limiter for
-every `/auth/*` route, since login needs brute-force protection anyway. It must exist before the
-API is reachable from any network.
+Limited to 5 requests per 15 minutes per client IP (see [Rate limiting](#rate-limiting)), which
+adds 429 and 503 to the responses above.
+
+### `POST /auth/login`
+
+```json
+{ "email": "anna@example.com", "password": "correct horse battery staple" }
+```
+
+`200`:
+
+```http
+HTTP/1.1 200 OK
+Cache-Control: no-store
+Set-Cookie: costly_refresh=<43 characters>; Path=/auth; Expires=<in 30 days>; HttpOnly; SameSite=Strict
+Content-Type: application/json
+
+{ "accessToken": "<JWT>", "tokenType": "Bearer", "expiresIn": 900 }
+```
+
+- The email is trimmed and matched case-insensitively. The password is NFKC-normalized, as at
+  registration.
+- Only the body's shape is checked (400). The password policy isn't, so a wrong guess is always a
+  401, never a hint about the rules.
+- A wrong password and an unknown email both answer `401` "Invalid email or password.", after
+  the same Argon2id work.
+- Every login starts a new session.
+
+### `POST /auth/refresh`
+
+No body: the refresh token is read only from the `costly_refresh` cookie. `200` has the same
+shape as login, with a rotated cookie.
+
+The cookie is cleared and the answer is `401` "The refresh session is invalid or has expired."
+when the token is:
+- missing, unknown or malformed;
+- expired (30 days after login) or revoked;
+- already used. That is reuse, and it also ends the session for every token in it (ADR-0006).
+
+Clients must send one refresh at a time.
+
+### `POST /auth/logout`
+
+No body and no access token: it ends the session of the `costly_refresh` cookie and clears the
+cookie. It always answers `204`, whether or not there was a session. Other sessions of the same
+user keep working. An access token issued before logout stays valid until it expires (at most
+15 minutes).
+
+### `GET /auth/me`
+
+Requires `Authorization: Bearer <accessToken>`. `200` returns
+`{ id, email, baseCurrency, timezone, createdAt }`.
+
+## Authentication
+
+Protected routes use `AccessTokenGuard` from the identity module and read the caller with
+`@CurrentUser()`.
+
+- The user id comes only from the verified token's `sub`, never from a body or query parameter.
+- The guard doesn't query the database.
+- A missing, malformed, expired or wrongly signed token is `401` "The access token is missing,
+  invalid or expired." with `WWW-Authenticate: Bearer realm="costly"` (RFC 6750). That includes
+  any algorithm other than HS256, and the wrong issuer or audience.
+
+**Web client contract:**
+- Keep the access token in memory only, never in localStorage.
+- Send requests to `/auth/login`, `/auth/refresh` and `/auth/logout` with `credentials:
+  "include"`.
+- Refresh when the access token expires or a request answers 401.
+- Never run two refreshes at once.
+
+**CSRF:** the cookie is `SameSite=Strict`. The three cookie endpoints also answer `403` to any
+request whose `Origin` header is present and isn't `CORS_ORIGIN`.
+
+## Rate limiting
+
+Redis fixed windows of 15 minutes, checked before validation and before any Argon2id work
+(ADR-0006):
+
+| Endpoint | Limit |
+|---|---|
+| `POST /auth/register` | 5 per client IP |
+| `POST /auth/login` | 10 per client IP, and 10 failed attempts per account |
+| `POST /auth/refresh` | 30 per client IP |
+| `POST /auth/logout`, `GET /auth/me` | not limited |
+
+- **Over the limit:** `429` "Too many requests. Try again later." with `Retry-After` in
+  seconds.
+- **Redis unavailable** (not connected, or slower than 500 ms): `503` "This service is temporarily
+  unavailable. Try again later." The limits fail closed.
+- **Unaffected by a Redis outage:** issued access tokens and logout.
+
+## Deployment requirements
+
+| Variable | Development | Production |
+|---|---|---|
+| `JWT_ACCESS_SECRET` | the value in `.env.example` | required, at least 32 characters, generated with `openssl rand -base64 48`; the example value is refused |
+| `CORS_ORIGIN` | `http://localhost:5173` | the web client's exact origin, on the same site as the API (e.g. `app.example.com` and `api.example.com`), so the SameSite=Strict cookie is sent |
+| `TRUST_PROXY` | `0` | the number of reverse proxies in front of the API, usually `1`. The proxy must overwrite, not append to, a client-supplied `X-Forwarded-For` |
+| `AUTH_RATE_LIMIT` | `on` | `on`; `off` is refused |
+
+`NODE_ENV=production` also makes the refresh cookie `Secure`, so production must be served over
+HTTPS.
