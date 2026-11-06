@@ -10,6 +10,13 @@ export const TOKEN_AUDIENCE = 'costly-api';
 /** Absolute session lifetime: rotated tokens inherit the expiry set at login. */
 export const REFRESH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
+/**
+ * A token rotated less than this long ago is presented again by a concurrent
+ * request of the same client (two tabs refreshing at once), not by a thief: it
+ * gets 409 and the session survives. Later replays revoke the session.
+ */
+export const CONCURRENT_REFRESH_GRACE_SECONDS = 10;
+
 export const REFRESH_COOKIE_NAME = 'costly_refresh';
 /** The cookie is only sent to the endpoints that read it. */
 export const REFRESH_COOKIE_PATH = '/auth';

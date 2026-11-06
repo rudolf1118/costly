@@ -295,10 +295,26 @@ describe('authentication', () => {
       await refresh(token).expect(200);
     });
 
+    /** Moves a token's rotation into the past, beyond the concurrent-refresh grace window. */
+    async function rotatedLongAgo(token: string): Promise<void> {
+      await prisma.$executeRaw`
+        UPDATE refresh_tokens SET rotated_at = now() - interval '11 seconds'
+        WHERE token_hash = ${createHash('sha256').update(token).digest('hex')}`;
+    }
+
+    const concurrentRefresh = {
+      type: 'about:blank',
+      title: 'Conflict',
+      status: 409,
+      detail:
+        'This refresh token was just exchanged by another request. Retry with the current cookie.',
+    };
+
     it('rejects a replayed token and ends the whole session', async () => {
       const account = await newAccount();
       const first = await session(account);
       const second = cookieValue(refreshCookie(await refresh(first).expect(200)));
+      await rotatedLongAgo(first);
 
       const replay = await refresh(first).expect(401);
 
@@ -308,15 +324,58 @@ describe('authentication', () => {
       expect((await tokenRow(second)).revokedAt).not.toBeNull();
     });
 
-    it('lets exactly one of several concurrent refreshes with one token succeed', async () => {
+    it('answers every later replay the same way', async () => {
+      const first = await session(await newAccount());
+      await refresh(first).expect(200);
+      await rotatedLongAgo(first);
+
+      await refresh(first).expect(401);
+      await refresh(first).expect(401);
+    });
+
+    it('treats a token presented again moments after its rotation as a concurrent duplicate', async () => {
+      const account = await newAccount();
+      const first = await session(account);
+      const second = cookieValue(refreshCookie(await refresh(first).expect(200)));
+
+      const duplicate = await refresh(first).expect(409);
+
+      expect(duplicate.body).toEqual(concurrentRefresh);
+      // The cookie the winner set must survive, and so must the session.
+      expect(duplicate.headers['set-cookie']).toBeUndefined();
+      await refresh(second).expect(200);
+    });
+
+    it('keeps the session when several refreshes with one token race, admitting exactly one', async () => {
       const token = await session(await newAccount());
 
       const responses = await Promise.all(Array.from({ length: 5 }, () => refresh(token)));
 
-      expect(responses.map((res) => res.status).sort()).toEqual([200, 401, 401, 401, 401]);
-      // The losers count as reuse: the winner's successor was revoked too.
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 409, 409, 409, 409]);
       const winner = responses.find((res) => res.status === 200)!;
-      await refresh(cookieValue(refreshCookie(winner))).expect(401);
+      // Like a second browser tab retrying with the cookie the winner set.
+      await refresh(cookieValue(refreshCookie(winner))).expect(200);
+    });
+
+    it('does not shield a token of a revoked session with the grace window', async () => {
+      const first = await session(await newAccount());
+      const second = cookieValue(refreshCookie(await refresh(first).expect(200)));
+      await logout(second).expect(204);
+
+      await refresh(first).expect(401);
+    });
+
+    it("revokes only the replayed session, never another session or another user's", async () => {
+      const account = await newAccount();
+      const [stolen, other] = await Promise.all([session(account), session(account)]);
+      const someoneElse = await session(await newAccount());
+      await refresh(stolen).expect(200);
+      await rotatedLongAgo(stolen);
+
+      await refresh(stolen).expect(401);
+
+      await refresh(other).expect(200);
+      await refresh(someoneElse).expect(200);
     });
 
     it('rejects a token whose session has expired', async () => {

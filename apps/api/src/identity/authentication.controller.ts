@@ -62,8 +62,10 @@ export class AuthenticationController {
 
   /**
    * Rotates the refresh cookie and returns a new access token. 401 for a
-   * missing, unknown, expired, revoked or already used refresh token; a reused
-   * one also ends its session (ADR-0006). The cookie is cleared on any 401.
+   * missing, unknown, expired, revoked or reused refresh token; a reused one
+   * also ends its session (ADR-0006). The cookie is cleared on any 401. A 409
+   * (a concurrent request already rotated it) leaves the cookie alone: the
+   * browser already holds the successor, and clearing it would lose the session.
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)

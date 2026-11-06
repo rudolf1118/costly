@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../platform/database/prisma.service';
-import { REFRESH_SESSION_TTL_MS } from './auth.constants';
+import { CONCURRENT_REFRESH_GRACE_SECONDS, REFRESH_SESSION_TTL_MS } from './auth.constants';
 
 export interface IssuedRefreshToken {
   /** The credential itself. Only the client ever holds it; it is not stored. */
@@ -27,6 +27,13 @@ function newToken(): string {
 
 export function invalidRefreshSession(): UnauthorizedException {
   return new UnauthorizedException('The refresh session is invalid or has expired.');
+}
+
+/** A concurrent request from the same client already rotated this token; the browser now holds its successor. */
+export function concurrentRefresh(): ConflictException {
+  return new ConflictException(
+    'This refresh token was just exchanged by another request. Retry with the current cookie.',
+  );
 }
 
 export interface RotatedRefreshToken {
@@ -73,8 +80,9 @@ export class RefreshTokensService {
   }
 
   /**
-   * Exchanges a refresh token for its successor in the same session, or throws
-   * 401. Everything happens in one transaction that first takes the session's
+   * Exchanges a refresh token for its successor in the same session. Throws
+   * 409 for a duplicate of a rotation that happened moments ago, and 401 for
+   * anything else that cannot be rotated. Everything happens in one transaction that first takes the session's
    * lock (see lockSession), so it never interleaves with another rotation,
    * reuse revocation or logout of the same session. The conditional UPDATE
    * passes only for an unrotated, unrevoked, unexpired token, and the
@@ -107,11 +115,21 @@ export class RefreshTokensService {
         return current;
       }
 
-      // An already exchanged token has been used twice: by the client and by
-      // whoever else holds a copy. Nobody can tell which is legitimate, so the
-      // whole session is revoked (RFC 9700, refresh token reuse detection).
-      // Under the session lock, this sees every successor, including one
-      // created by a rotation that was in flight when the replay arrived.
+      // Exchanged moments ago in a live session: a second tab or a restored
+      // window refreshing at the same time, not a replay. No token is issued,
+      // so this grants nothing; the client retries with the cookie the winning
+      // request set (ADR-0006).
+      const [presented] = await tx.$queryRaw<{ just_rotated: boolean }[]>`
+        SELECT rotated_at > now() - ${CONCURRENT_REFRESH_GRACE_SECONDS}::int * interval '1 second'
+               AND revoked_at IS NULL AND expires_at > now() AS just_rotated
+        FROM refresh_tokens WHERE token_hash = ${tokenHash}`;
+      if (presented?.just_rotated) return 'concurrent' as const;
+
+      // Otherwise an already exchanged token has been used twice: by the
+      // client and by whoever else holds a copy. Nobody can tell which is
+      // legitimate, so the whole session is revoked (RFC 9700, refresh token
+      // reuse detection). Under the session lock, this sees every successor,
+      // including one created by a rotation in flight when the replay arrived.
       await tx.$executeRaw`
         UPDATE refresh_tokens SET revoked_at = now()
         WHERE family_id = ${familyId}::uuid AND revoked_at IS NULL
@@ -119,6 +137,7 @@ export class RefreshTokensService {
       return undefined;
     });
 
+    if (rotated === 'concurrent') throw concurrentRefresh();
     if (!rotated) throw invalidRefreshSession();
     return {
       userId: rotated.user_id,

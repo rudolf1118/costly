@@ -137,7 +137,9 @@ when the token is:
 - expired (30 days after login) or revoked;
 - already used. That is reuse, and it also ends the session for every token in it (ADR-0006).
 
-Clients must send one refresh at a time.
+`409` "This refresh token was just exchanged by another request. Retry with the current cookie."
+means a concurrent request, such as another tab, rotated this token less than 10 seconds ago. The
+cookie isn't touched and the session lives on. Retry once.
 
 ### `POST /auth/logout`
 
@@ -167,7 +169,7 @@ Protected routes use `AccessTokenGuard` from the identity module and read the ca
 - Send requests to `/auth/login`, `/auth/refresh` and `/auth/logout` with `credentials:
   "include"`.
 - Refresh when the access token expires or a request answers 401.
-- Never run two refreshes at once.
+- On a `409` from refresh, retry once. The browser already holds the new cookie.
 
 **CSRF:** the cookie is `SameSite=Strict`. The three cookie endpoints also answer `403` to any
 request whose `Origin` header is present and isn't `CORS_ORIGIN`.

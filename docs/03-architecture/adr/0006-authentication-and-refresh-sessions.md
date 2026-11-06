@@ -1,7 +1,8 @@
 # ADR-0006: Authentication with JWT access tokens and rotating refresh sessions
 
 Status: Accepted
-Date: 2026-11-06
+Date: 2026-11-06 (amended 2026-11-06 by the PR #4 security audit: session lock, concurrent-refresh
+grace window. Each change is marked "Amended".)
 
 ## Context
 
@@ -34,10 +35,25 @@ then inserts the successor. Only one request can win the update for a given toke
 index allows at most one active (unrotated, unrevoked) token per family, so the database itself
 refuses two successful rotations.
 
+*Amended:* rotation, reuse revocation and logout each start their transaction by taking the
+session's transaction-scoped advisory lock (`pg_advisory_xact_lock` on the family id). Under READ
+COMMITTED, a revoking `UPDATE` that waited on the old token's row lock otherwise missed the
+successor a concurrent rotation had just inserted. Logout then didn't end the session, and reuse
+detection left a thief's fresh token alive. With the lock, writes to one session run one after
+another.
+
 **Reuse detection.** Presenting a token that has already been rotated revokes every token of its
-family and answers 401. Concurrent refreshes with the same token count as reuse: one wins, the
-others revoke the family, including the winner's new token. Clients must therefore send one
-refresh at a time.
+family and answers 401.
+
+*Amended:* there is one exception, the concurrent duplicate. A token rotated **less than 10 seconds
+ago** in a session that is still live gets 409 "retry with the current cookie", without revoking
+anything or clearing the cookie. The access token lives only in memory, so every page load and new
+tab refreshes. Two tabs, or a browser restoring several, therefore present the same cookie at once.
+Under the original rule that logged the user out everywhere, and the losers' responses even cleared
+the shared cookie. A thief replaying within the window gains nothing, because 409 carries no token.
+If the thief rotated first, the victim's client keeps presenting the old token, and the first
+attempt after the window revokes the session. Two successful rotations of one credential remain
+impossible.
 
 **Transport.** The refresh token travels only in an HttpOnly cookie, never in a body:
 - name `costly_refresh`;
@@ -107,7 +123,8 @@ Configuration validation rejects it in production.
   15 minutes.
 - Rotating `JWT_ACCESS_SECRET` invalidates all access tokens at once. Clients recover through
   refresh; refresh tokens are unaffected.
-- The web client must serialize refreshes (one in flight at a time), or reuse detection logs it out.
+- The web client retries a refresh that answers 409 once, after the response that won has updated
+  the cookie. Reuse detection is delayed by at most 10 seconds.
 - An attacker who knows a victim's email can lock that account out of login for 15 minutes with
   10 failed attempts. This is accepted for a single-user application, and the per-IP limit bounds
   the attacker's own rate.
@@ -128,8 +145,12 @@ revocation, but every request needs a session lookup. The roadmap specifies JWT 
 **Sliding refresh expiry.** Keeps active users logged in indefinitely, but lets a stolen family
 that keeps refreshing live forever.
 
-**A grace period for concurrent refreshes.** Friendlier to clients that race, but it reintroduces
-"several successful uses of one credential". Clients serializing refresh is cheaper and safer.
+**A grace period that re-issues tokens to concurrent refreshes.** Friendlier still, but it means
+several successful uses of one credential. The amended rule keeps a single success and only
+withholds the revocation.
+
+**Requiring clients to serialize refreshes (the original decision).** Correct for one tab, but tabs
+can't share an in-flight request without extra browser machinery, and failure meant a lost session.
 
 **`@nestjs/throttler` with a Redis storage adapter.** A third-party storage package for something
 that is one atomic Lua script here, and it doesn't fit the account-level failure counter.
