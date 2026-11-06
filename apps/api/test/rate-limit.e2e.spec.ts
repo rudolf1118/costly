@@ -214,6 +214,39 @@ describe('authentication rate limits', () => {
       );
     });
 
+    it('lets the owner in from a client that logged in before, while the account is under attack', async () => {
+      const email = await newAccount();
+      const home = newClient();
+      await post('/auth/login', home).send({ email, password: PASSWORD }).expect(200);
+      for (let i = 0; i < 10; i++) {
+        await post('/auth/login', newClient())
+          .send({ email, password: 'wrong password' })
+          .expect(401);
+      }
+
+      // A client the account has never been used from stays blocked, right password or not...
+      expectTooManyRequests(
+        await post('/auth/login', newClient()).send({ email, password: PASSWORD }),
+      );
+      // ...but the owner's own client is not locked out by other people's failures.
+      await post('/auth/login', home).send({ email, password: PASSWORD }).expect(200);
+    });
+
+    it('remembers a client for the account it logged in to, not for other accounts', async () => {
+      const [mine, target] = await Promise.all([newAccount(), newAccount()]);
+      const client = newClient();
+      await post('/auth/login', client).send({ email: mine, password: PASSWORD }).expect(200);
+      for (let i = 0; i < 10; i++) {
+        await post('/auth/login', newClient())
+          .send({ email: target, password: 'wrong' })
+          .expect(401);
+      }
+
+      expectTooManyRequests(
+        await post('/auth/login', client).send({ email: target, password: PASSWORD }),
+      );
+    });
+
     it('does not count successful logins against the account', async () => {
       const email = await newAccount();
 
@@ -253,10 +286,17 @@ describe('authentication rate limits', () => {
     const ttls = await Promise.all(keys.map((key) => redis.pttl(key)));
 
     expect(keys.length).toBeGreaterThan(0);
-    for (const ttl of ttls) {
+    expect(keys.some((key) => key.startsWith('ratelimit:login-known:'))).toBe(true);
+    keys.forEach((key, index) => {
+      const ttl = ttls[index] ?? -1;
+      // Every key expires: counters with their 15-minute window, a known
+      // client after 30 days, like a session.
+      const bound = key.startsWith('ratelimit:login-known:')
+        ? 30 * 24 * 3600 * 1000
+        : 15 * 60 * 1000;
       expect(ttl).toBeGreaterThan(0);
-      expect(ttl).toBeLessThanOrEqual(15 * 60 * 1000);
-    }
+      expect(ttl).toBeLessThanOrEqual(bound);
+    });
     const everything = keys.join('\n');
     expect(everything).not.toContain(email);
     expect(everything).not.toContain('@');

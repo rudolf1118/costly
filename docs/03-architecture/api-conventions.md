@@ -182,7 +182,7 @@ Redis fixed windows of 15 minutes, checked before validation and before any Argo
 | Endpoint | Limit |
 |---|---|
 | `POST /auth/register` | 5 per client IP |
-| `POST /auth/login` | 10 per client IP, and 10 failed attempts per account |
+| `POST /auth/login` | 10 per client IP, and 10 failed attempts per account; clients that logged in to the account within 30 days are exempt from the account limit (ADR-0006) |
 | `POST /auth/refresh` | 30 per client IP |
 | `POST /auth/logout`, `GET /auth/me` | not limited |
 

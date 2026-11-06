@@ -45,6 +45,10 @@ return { count, redis.call('PTTL', KEYS[1]) }`;
 
 const PEEK = `return { tonumber(redis.call('GET', KEYS[1]) or '0'), redis.call('PTTL', KEYS[1]) }`;
 
+const MARK = `redis.call('SET', KEYS[1], '1', 'PX', ARGV[1]) return { 1, 0 }`;
+
+const IS_MARKED = `return { redis.call('EXISTS', KEYS[1]), 0 }`;
+
 /**
  * Redis calls give up after this long. ioredis queues commands while
  * disconnected (maxRetriesPerRequest: null, required by BullMQ), so without a
@@ -87,6 +91,17 @@ export class RateLimiter {
     if (!this.enabled) return;
     const state = await this.run(PEEK, key);
     if (state.count >= rule.limit) throw new RateLimitExceededException(state.retryAfterMs);
+  }
+
+  /** Records a fact for `ttlMs`, such as a client known to an account. */
+  async mark(key: string, ttlMs: number): Promise<void> {
+    if (!this.enabled) return;
+    await this.run(MARK, key, String(ttlMs));
+  }
+
+  async isMarked(key: string): Promise<boolean> {
+    if (!this.enabled) return false;
+    return (await this.run(IS_MARKED, key)).count === 1;
   }
 
   private async run(script: string, key: string, ...args: string[]): Promise<WindowState> {

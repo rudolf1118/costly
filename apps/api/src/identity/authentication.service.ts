@@ -4,7 +4,7 @@ import { PrismaService } from '../platform/database/prisma.service';
 import { RateLimiter } from '../platform/rate-limit/rate-limiter.service';
 import { AccessTokenService } from './access-token.service';
 import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
-import { LOGIN_FAILURES_PER_ACCOUNT, loginFailuresKey } from './auth-rate-limits';
+import { KNOWN_CLIENT_TTL_MS, LOGIN_FAILURES_PER_ACCOUNT, loginKeys } from './auth-rate-limits';
 import { hashPassword, verifyPassword } from './password';
 import { type IssuedRefreshToken, RefreshTokensService } from './refresh-tokens.service';
 import { type UserProfile, userProfileFields } from './user-profile';
@@ -37,11 +37,17 @@ export class AuthenticationService implements OnModuleInit {
    * email give the same 401 after the same amount of hashing work, so neither
    * the response nor its timing reveals whether the account exists. The
    * account's failure budget is checked first, before any hashing; unknown
-   * emails have one too, so a 429 doesn't reveal existence either.
+   * emails have one too, so a 429 doesn't reveal existence either. A client
+   * that has logged in to this account before skips that budget, so an
+   * attacker's failures can't lock the owner out; per-IP limits still apply.
+   *
+   * @param client the caller's rate-limit identity (rateLimitSubject)
    */
-  async login(email: string, password: string): Promise<SessionTokens> {
-    const failuresKey = loginFailuresKey(email);
-    await this.limiter.ensureBelow(failuresKey, LOGIN_FAILURES_PER_ACCOUNT);
+  async login(email: string, password: string, client: string): Promise<SessionTokens> {
+    const keys = loginKeys(email, client);
+    if (!(await this.limiter.isMarked(keys.knownClient))) {
+      await this.limiter.ensureBelow(keys.failures, LOGIN_FAILURES_PER_ACCOUNT);
+    }
     // citext: the lookup ignores case, as uniqueness does.
     const user = await this.prisma.user.findUnique({
       where: { email },
@@ -49,9 +55,10 @@ export class AuthenticationService implements OnModuleInit {
     });
     const matches = await verifyPassword(user?.passwordHash ?? this.dummyHash, password);
     if (!user || !matches) {
-      await this.limiter.hit(failuresKey, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
+      await this.limiter.hit(keys.failures, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
       throw new UnauthorizedException('Invalid email or password.');
     }
+    await this.limiter.mark(keys.knownClient, KNOWN_CLIENT_TTL_MS);
     return this.startSession(user.id);
   }
 

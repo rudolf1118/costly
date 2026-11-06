@@ -18,7 +18,7 @@ describe('AuthenticationService.login', () => {
 
   async function serviceFinding(user: { id: string; passwordHash: string } | null) {
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(user) } };
-    const limiter = { ensureBelow: vi.fn(), hit: vi.fn() };
+    const limiter = { ensureBelow: vi.fn(), hit: vi.fn(), isMarked: vi.fn(), mark: vi.fn() };
     const service = new AuthenticationService(
       prisma as never,
       {} as never,
@@ -34,9 +34,9 @@ describe('AuthenticationService.login', () => {
   it('verifies against a dummy hash with the real parameters when the email is unknown', async () => {
     const service = await serviceFinding(null);
 
-    await expect(service.login('nobody@costly.test', 'any password')).rejects.toThrow(
-      'Invalid email or password.',
-    );
+    await expect(
+      service.login('nobody@costly.test', 'any password', '198.51.100.1'),
+    ).rejects.toThrow('Invalid email or password.');
 
     expect(verifyPassword).toHaveBeenCalledTimes(1);
     expect(vi.mocked(verifyPassword).mock.calls[0]?.[0]).toMatch(ARGON2ID_HASH);
@@ -46,9 +46,9 @@ describe('AuthenticationService.login', () => {
     const passwordHash = await hashPassword('the real password');
     const service = await serviceFinding({ id: 'user-id', passwordHash });
 
-    await expect(service.login('anna@costly.test', 'a wrong password')).rejects.toThrow(
-      'Invalid email or password.',
-    );
+    await expect(
+      service.login('anna@costly.test', 'a wrong password', '198.51.100.1'),
+    ).rejects.toThrow('Invalid email or password.');
 
     expect(vi.mocked(verifyPassword).mock.calls[0]?.[0]).toBe(passwordHash);
   });

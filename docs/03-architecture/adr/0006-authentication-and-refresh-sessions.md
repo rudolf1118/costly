@@ -2,7 +2,8 @@
 
 Status: Accepted
 Date: 2026-11-06 (amended 2026-11-06 by the PR #4 security audit: session lock, concurrent-refresh
-grace window, IPv6 /64 client identity. Each change is marked "Amended".)
+grace window, IPv6 /64 client identity, known clients exempt from the account limit. Each change
+is marked "Amended".)
 
 ## Context
 
@@ -122,7 +123,13 @@ Configuration validation rejects it in production.
   CSRF defences. `localhost:5173` and `localhost:3100` are the same site, and production must put
   web and API on the same site (e.g. `app.` and `api.` subdomains of one domain).
 - **Account-level failure limit:** stops brute force against one account from many IPs. Counting
-  only failures lets the real user log in after other people's attempts.
+  only failures means successful logins never use up the budget.
+- *Amended:* **known clients are exempt from the account limit.** A client (rate-limit identity)
+  that logged in to the account successfully in the last 30 days skips the per-account failure
+  check, though it stays under the per-IP limit. Without this, anyone who knew the owner's email
+  could keep the account locked indefinitely with 10 failures every 15 minutes from a single IP.
+  The marker key is a SHA-256 of the account digest and the client identity, so Redis stores
+  neither the email nor the IP.
 - **Fail closed when Redis is down:** an outage must not turn into unlimited password hashing.
   Costly needs Redis for jobs anyway, and readiness already reports it.
 
@@ -134,9 +141,10 @@ Configuration validation rejects it in production.
   refresh; refresh tokens are unaffected.
 - The web client retries a refresh that answers 409 once, after the response that won has updated
   the cookie. Reuse detection is delayed by at most 10 seconds.
-- An attacker who knows a victim's email can lock that account out of login for 15 minutes with
-  10 failed attempts. This is accepted for a single-user application, and the per-IP limit bounds
-  the attacker's own rate.
+- An attacker who knows the owner's email can still block logins to that account from clients
+  the account has never been used from. The owner keeps access from any client that logged in
+  within 30 days. An attacker on the owner's own network shares that client identity, so they
+  skip the account limit but stay under the per-IP limit of 10 per 15 minutes.
 - Expired and revoked rows accumulate in `refresh_tokens`. A cleanup job arrives with the
   background-processing work in Chapter 2.
 - Redis outages make registration, login and refresh unavailable (503). Already-issued access

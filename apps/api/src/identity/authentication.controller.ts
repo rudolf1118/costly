@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import type { Env } from '../platform/config/env.schema';
 import { ZodValidationPipe } from '../platform/http/zod-validation.pipe';
+import { rateLimitSubject } from '../platform/rate-limit/client-address';
 import { RateLimitGuard, RateLimitPerIp } from '../platform/rate-limit/rate-limit.guard';
 import {
   AccessTokenGuard,
@@ -55,9 +56,15 @@ export class AuthenticationController {
   @RateLimitPerIp(LOGIN_PER_IP)
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
+    @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ): Promise<AccessTokenResponse> {
-    return this.respond(await this.authentication.login(body.email, body.password), response);
+    const session = await this.authentication.login(
+      body.email,
+      body.password,
+      rateLimitSubject(request.ip),
+    );
+    return this.respond(session, response);
   }
 
   /**

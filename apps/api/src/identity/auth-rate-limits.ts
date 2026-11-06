@@ -15,13 +15,28 @@ export const REFRESH_PER_IP: RateLimitPolicy = { name: 'refresh', limit: 30, win
 
 /**
  * Failed logins per account from any number of IPs: stops a distributed
- * attack on one account. Only failures count, so the owner can still log in
- * after other people's attempts, until they reach the limit themselves.
+ * attack on one account. Only failures count. Clients that have logged in to
+ * the account before are exempt (but still limited per IP), so other people's
+ * failures cannot lock the owner out (ADR-0006).
  */
 export const LOGIN_FAILURES_PER_ACCOUNT: RateLimit = { limit: 10, windowMs: WINDOW_MS };
 
-/** The account's Redis key holds a SHA-256 of the normalized email, never the address. */
-export function loginFailuresKey(email: string): string {
-  const digest = createHash('sha256').update(email.trim().toLowerCase()).digest('hex');
-  return `ratelimit:login-failures:account:${digest}`;
+/**
+ * How long a client stays known to an account after a successful login from
+ * it: as long as a session (ADR-0006).
+ */
+export const KNOWN_CLIENT_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
+const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
+
+/** Redis keys of one account's login protection. They hold digests: never an address or an IP. */
+export function loginKeys(
+  email: string,
+  client: string,
+): { failures: string; knownClient: string } {
+  const account = sha256(email.trim().toLowerCase());
+  return {
+    failures: `ratelimit:login-failures:account:${account}`,
+    knownClient: `ratelimit:login-known:account:${sha256(`${account}|${client}`)}`,
+  };
 }
