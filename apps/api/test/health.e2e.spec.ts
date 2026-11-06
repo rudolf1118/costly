@@ -1,25 +1,10 @@
-import { execFile } from 'node:child_process';
-import { resolve } from 'node:path';
-import { promisify } from 'node:util';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-
-const run = promisify(execFile);
-
-/**
- * Brings the throwaway database up to the committed schema. Tests must never
- * call `migrate dev`, which is interactive and writes new migration files.
- */
-async function applyMigrations(databaseUrl: string): Promise<void> {
-  await run('prisma', ['migrate', 'deploy'], {
-    cwd: resolve(__dirname, '..'),
-    env: { ...process.env, DATABASE_URL: databaseUrl },
-  });
-}
+import { applyMigrations } from './support/migrations';
 
 describe('health endpoints', () => {
   let postgres: StartedPostgreSqlContainer;
