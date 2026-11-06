@@ -21,7 +21,7 @@ model User {
   id           String   @id @default(dbgenerated("uuidv7()")) @db.Uuid
   /// citext: unique regardless of case, stored as the user typed it.
   email        String   @unique @db.Citext
-  /// A password hash only, never the password. The algorithm is chosen with registration.
+  /// An Argon2id hash in PHC string form, never the password (ADR-0005).
   passwordHash String   @map("password_hash")
   /// ISO 4217 code. v1 supports a single currency (ADR-0002).
   baseCurrency String   @default("AMD") @map("base_currency") @db.Char(3)

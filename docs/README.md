@@ -44,9 +44,10 @@ docs/
       0002-money-as-bigint-minor-units.md
       0003-prisma-with-raw-sql-for-analytics.md
       0004-bullmq-over-rabbitmq.md
-      0005-transfers-as-paired-rows.md
-      0006-dirty-marking-instead-of-outbox.md
-      0007-sync-simulation-async-snapshots.md
+      0005-password-policy-and-argon2id.md
+      0006-transfers-as-paired-rows.md            (planned)
+      0007-dirty-marking-instead-of-outbox.md     (planned)
+      0008-sync-simulation-async-snapshots.md     (planned)
       ...                          one ADR per significant decision, including rejected options
 
   04-database/
