@@ -5,12 +5,13 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Req,
   Res,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import type { Env } from '../platform/config/env.schema';
 import { ZodValidationPipe } from '../platform/http/zod-validation.pipe';
 import {
@@ -21,7 +22,8 @@ import {
 } from './access-token.guard';
 import { AuthenticationService, type SessionTokens } from './authentication.service';
 import { type LoginInput, loginSchema } from './login.schema';
-import { setRefreshCookie } from './refresh-cookie';
+import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from './refresh-cookie';
+import { invalidRefreshSession } from './refresh-tokens.service';
 import { TrustedOriginGuard } from './trusted-origin.guard';
 import type { UserProfile } from './user-profile';
 
@@ -52,6 +54,45 @@ export class AuthenticationController {
     @Res({ passthrough: true }) response: Response,
   ): Promise<AccessTokenResponse> {
     return this.respond(await this.authentication.login(body.email, body.password), response);
+  }
+
+  /**
+   * Rotates the refresh cookie and returns a new access token. 401 for a
+   * missing, unknown, expired, revoked or already used refresh token; a reused
+   * one also ends its session (ADR-0006). The cookie is cleared on any 401.
+   */
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(TrustedOriginGuard)
+  async refresh(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<AccessTokenResponse> {
+    try {
+      const token = readRefreshCookie(request);
+      if (!token) throw invalidRefreshSession();
+      return this.respond(await this.authentication.refresh(token), response);
+    } catch (error) {
+      if (error instanceof UnauthorizedException) clearRefreshCookie(response, this.secureCookies);
+      throw error;
+    }
+  }
+
+  /**
+   * Ends the session of the refresh cookie and clears it. Needs no access
+   * token, so it works after the access token has expired. Always 204,
+   * whether or not there was a session to end.
+   */
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(TrustedOriginGuard)
+  async logout(
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<void> {
+    const token = readRefreshCookie(request);
+    if (token) await this.authentication.logout(token);
+    clearRefreshCookie(response, this.secureCookies);
   }
 
   /** The authenticated user's profile. */

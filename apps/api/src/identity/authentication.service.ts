@@ -45,6 +45,18 @@ export class AuthenticationService implements OnModuleInit {
     return this.startSession(user.id);
   }
 
+  /** A new access token and a rotated refresh token for the same session, or 401. */
+  async refresh(refreshToken: string): Promise<SessionTokens> {
+    const rotated = await this.refreshTokens.rotate(refreshToken);
+    const accessToken = await this.accessTokens.issue(rotated.userId);
+    return { accessToken, expiresIn: ACCESS_TOKEN_TTL_SECONDS, refresh: rotated.refresh };
+  }
+
+  /** Ends the session the refresh token belongs to, if there is one. */
+  logout(refreshToken: string): Promise<void> {
+    return this.refreshTokens.revokeSession(refreshToken);
+  }
+
   /** The current user's profile, or 401 if the account no longer exists. */
   async profile(userId: string): Promise<UserProfile> {
     const user = await this.prisma.user.findUnique({

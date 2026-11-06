@@ -228,6 +228,233 @@ describe('authentication', () => {
     });
   });
 
+  /** Logs in and returns the refresh token from the cookie. */
+  async function session(account: { email: string }): Promise<string> {
+    const res = await login({ email: account.email, password: PASSWORD }).expect(200);
+    return cookieValue(refreshCookie(res));
+  }
+
+  function refresh(token: string | undefined) {
+    const req = http().post('/auth/refresh');
+    if (token !== undefined) req.set('Cookie', `costly_refresh=${token}`);
+    return req;
+  }
+
+  function logout(token: string | undefined) {
+    const req = http().post('/auth/logout');
+    if (token !== undefined) req.set('Cookie', `costly_refresh=${token}`);
+    return req;
+  }
+
+  const tokenRow = (token: string) =>
+    prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: createHash('sha256').update(token).digest('hex') },
+    });
+
+  const invalidSession = {
+    type: 'about:blank',
+    title: 'Unauthorized',
+    status: 401,
+    detail: 'The refresh session is invalid or has expired.',
+  };
+
+  describe('POST /auth/refresh', () => {
+    it('returns a new access token and rotates the refresh cookie', async () => {
+      const account = await newAccount();
+      const first = await session(account);
+
+      const res = await refresh(first).expect(200);
+      const second = cookieValue(refreshCookie(res));
+
+      expect(res.body).toMatchObject({ tokenType: 'Bearer', expiresIn: 900 });
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(second).not.toBe(first);
+      await me(res.body.accessToken).expect(200);
+    });
+
+    it('keeps the session and its absolute expiry, and marks the old token rotated', async () => {
+      const account = await newAccount();
+      const first = await session(account);
+
+      const second = cookieValue(refreshCookie(await refresh(first).expect(200)));
+      const [old, current] = await Promise.all([tokenRow(first), tokenRow(second)]);
+
+      expect(old.rotatedAt).not.toBeNull();
+      expect(current.familyId).toBe(old.familyId);
+      expect(current.expiresAt.getTime()).toBe(old.expiresAt.getTime());
+      expect(current.rotatedAt).toBeNull();
+    });
+
+    it('can be repeated along the chain of successors', async () => {
+      let token = await session(await newAccount());
+
+      for (let i = 0; i < 3; i++) {
+        token = cookieValue(refreshCookie(await refresh(token).expect(200)));
+      }
+
+      await refresh(token).expect(200);
+    });
+
+    it('rejects a replayed token and ends the whole session', async () => {
+      const account = await newAccount();
+      const first = await session(account);
+      const second = cookieValue(refreshCookie(await refresh(first).expect(200)));
+
+      const replay = await refresh(first).expect(401);
+
+      expect(replay.body).toEqual(invalidSession);
+      // Reuse revoked the family, so even the legitimate latest token is dead.
+      await refresh(second).expect(401);
+      expect((await tokenRow(second)).revokedAt).not.toBeNull();
+    });
+
+    it('lets exactly one of several concurrent refreshes with one token succeed', async () => {
+      const token = await session(await newAccount());
+
+      const responses = await Promise.all(Array.from({ length: 5 }, () => refresh(token)));
+
+      expect(responses.map((res) => res.status).sort()).toEqual([200, 401, 401, 401, 401]);
+      // The losers count as reuse: the winner's successor was revoked too.
+      const winner = responses.find((res) => res.status === 200)!;
+      await refresh(cookieValue(refreshCookie(winner))).expect(401);
+    });
+
+    it('rejects a token whose session has expired', async () => {
+      const token = await session(await newAccount());
+      await prisma.$executeRaw`
+        UPDATE refresh_tokens SET created_at = now() - interval '31 days', expires_at = now() - interval '1 day'
+        WHERE token_hash = ${createHash('sha256').update(token).digest('hex')}`;
+
+      expect((await refresh(token).expect(401)).body).toEqual(invalidSession);
+    });
+
+    it('rejects a token whose session was revoked', async () => {
+      const token = await session(await newAccount());
+      await prisma.refreshToken.updateMany({
+        where: { tokenHash: createHash('sha256').update(token).digest('hex') },
+        data: { revokedAt: new Date() },
+      });
+
+      await refresh(token).expect(401);
+    });
+
+    it.each([
+      ['no cookie', undefined],
+      ['an unknown token', 'A'.repeat(43)],
+      ['a malformed cookie', 'not a token'],
+    ])('rejects a request with %s and clears the cookie', async (_case, token) => {
+      const res = await refresh(token).expect(401);
+
+      expect(res.body).toEqual(invalidSession);
+      expect(refreshCookie(res)).toMatch(/Expires=Thu, 01 Jan 1970/);
+    });
+
+    it('rejects an access token sent as the refresh cookie', async () => {
+      const account = await newAccount();
+      const accessToken = (await login({ email: account.email, password: PASSWORD })).body
+        .accessToken;
+
+      await refresh(accessToken).expect(401);
+    });
+
+    it('ignores a refresh token sent in the body: the cookie is the only transport', async () => {
+      const token = await session(await newAccount());
+
+      await http().post('/auth/refresh').send({ refreshToken: token }).expect(401);
+    });
+
+    it('refuses a request sent from another origin, leaving the token usable', async () => {
+      const token = await session(await newAccount());
+
+      await refresh(token).set('Origin', 'https://evil.example').expect(403);
+
+      await refresh(token).expect(200);
+    });
+
+    it('leaves the old token valid when the rotation transaction fails', async () => {
+      const account = await newAccount();
+      const token = await session(account);
+      // Make inserting this user's next token fail inside the rotation transaction.
+      await prisma.$executeRawUnsafe(`
+        CREATE FUNCTION reject_successor() RETURNS trigger AS $$
+        BEGIN RAISE EXCEPTION 'simulated failure'; END $$ LANGUAGE plpgsql`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TRIGGER reject_successor BEFORE INSERT ON refresh_tokens
+        FOR EACH ROW WHEN (NEW.user_id = '${account.id}') EXECUTE FUNCTION reject_successor()`);
+
+      try {
+        const failed = await refresh(token).expect(500);
+        expect(failed.body).toEqual({
+          type: 'about:blank',
+          title: 'Internal Server Error',
+          status: 500,
+        });
+      } finally {
+        await prisma.$executeRawUnsafe('DROP TRIGGER reject_successor ON refresh_tokens');
+        await prisma.$executeRawUnsafe('DROP FUNCTION reject_successor()');
+      }
+
+      // The UPDATE that marked it rotated was rolled back with the failed INSERT.
+      expect((await tokenRow(token)).rotatedAt).toBeNull();
+      await refresh(token).expect(200);
+    });
+  });
+
+  describe('POST /auth/logout', () => {
+    it('ends the session, clears the cookie and answers 204', async () => {
+      const token = await session(await newAccount());
+
+      const res = await logout(token).expect(204);
+
+      expect(res.text).toBe('');
+      expect(refreshCookie(res)).toMatch(/^costly_refresh=;.*Expires=Thu, 01 Jan 1970/);
+      expect((await tokenRow(token)).revokedAt).not.toBeNull();
+      await refresh(token).expect(401);
+    });
+
+    it('answers 204 again when the session is already ended', async () => {
+      const token = await session(await newAccount());
+      await logout(token).expect(204);
+
+      await logout(token).expect(204);
+    });
+
+    it.each([
+      ['no cookie', undefined],
+      ['an unknown token', 'B'.repeat(43)],
+    ])('answers 204 with %s, revealing nothing', async (_case, token) => {
+      await logout(token).expect(204);
+    });
+
+    it("ends only this session: the user's other sessions keep working", async () => {
+      const account = await newAccount();
+      const [phone, laptop] = await Promise.all([session(account), session(account)]);
+
+      await logout(phone).expect(204);
+
+      await refresh(laptop).expect(200);
+      await refresh(phone).expect(401);
+    });
+
+    it('needs no access token, and leaves an issued one valid until it expires', async () => {
+      const account = await newAccount();
+      const res = await login({ email: account.email, password: PASSWORD }).expect(200);
+
+      await logout(cookieValue(refreshCookie(res))).expect(204);
+
+      // Documented in ADR-0006: stateless access tokens outlive their session by up to 15 minutes.
+      await me(res.body.accessToken).expect(200);
+    });
+
+    it('refuses a request sent from another origin, leaving the session alive', async () => {
+      const token = await session(await newAccount());
+
+      await logout(token).set('Origin', 'https://evil.example').expect(403);
+
+      await refresh(token).expect(200);
+    });
+  });
+
   describe('GET /auth/me and access tokens', () => {
     const jwt = new JwtService({ secret: SECRET });
     const claims = { issuer: 'costly-api', audience: 'costly-api' } as const;
