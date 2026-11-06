@@ -1,5 +1,6 @@
 import {
   type ArgumentsHost,
+  BadRequestException,
   ConflictException,
   Logger,
   NotFoundException,
@@ -81,6 +82,31 @@ describe('ProblemDetailsFilter', () => {
       detail: 'The request body is invalid.',
       errors: [{ path: 'email', message: 'Invalid email' }],
     });
+  });
+
+  it('replaces a JSON parse error with a message that quotes nothing', () => {
+    const { sent, host } = capture();
+    // What Nest builds from body-parser's SyntaxError for an unquoted value.
+    const parseError = new BadRequestException(
+      `Unexpected token 'm', ..."assword": my-real-se"... is not valid JSON`,
+    );
+
+    filter.catch(parseError, host);
+
+    expect(sent.body).toEqual({
+      type: 'about:blank',
+      title: 'Bad Request',
+      status: 400,
+      detail: 'The request body is not valid JSON.',
+    });
+  });
+
+  it('keeps the message of other bad requests', () => {
+    const { sent, host } = capture();
+
+    filter.catch(new BadRequestException('Validation failed (uuid is expected)'), host);
+
+    expect(sent.body).toMatchObject({ detail: 'Validation failed (uuid is expected)' });
   });
 
   it('keeps a body the thrower chose, as the health check does', () => {

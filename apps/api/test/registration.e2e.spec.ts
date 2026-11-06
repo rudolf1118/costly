@@ -235,6 +235,18 @@ describe('POST /auth/register', () => {
         .expect(400);
 
       expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+      expect(res.body.detail).toBe('The request body is not valid JSON.');
+    });
+
+    it('does not echo fragments of a malformed body back', async () => {
+      // V8's "Unexpected token" message quotes the input around the error.
+      const res = await request(app.getHttpServer())
+        .post('/auth/register')
+        .set('Content-Type', 'application/json')
+        .send('{"email": "a@costly.test", "password": my-real-secret}')
+        .expect(400);
+
+      expect(JSON.stringify(res.body)).not.toContain('real-se');
     });
 
     it('does not echo a rejected password back', async () => {

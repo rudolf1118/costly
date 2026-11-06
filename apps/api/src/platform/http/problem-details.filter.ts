@@ -1,6 +1,7 @@
 import { STATUS_CODES } from 'node:http';
 import {
   type ArgumentsHost,
+  BadRequestException,
   Catch,
   type ExceptionFilter,
   HttpException,
@@ -72,12 +73,27 @@ function toProblem(exception: HttpException): ProblemDetails {
   if (exception instanceof RequestValidationException) {
     return { ...problem(status, exception.message), errors: exception.errors };
   }
+  if (isJsonParseFailure(exception)) {
+    return problem(status, 'The request body is not valid JSON.');
+  }
   const body = exception.getResponse();
   const message = typeof body === 'string' ? body : (body as { message?: unknown }).message;
   // A detail that only repeats the title says nothing; arrays are not ours.
   const detail =
     typeof message === 'string' && message !== STATUS_CODES[status] ? message : undefined;
   return problem(status, detail);
+}
+
+/**
+ * Nest turns the JSON body parser's SyntaxError into a plain
+ * BadRequestException carrying V8's message, and that message can quote the
+ * raw body around the error ("...assword": my-real-se..."), credentials
+ * included. V8's JSON errors always mention JSON, which is what identifies them.
+ */
+function isJsonParseFailure(exception: HttpException): boolean {
+  // Exactly BadRequestException: subclasses such as RequestValidationException are ours.
+  const isPlainBadRequest = Object.getPrototypeOf(exception) === BadRequestException.prototype;
+  return isPlainBadRequest && /\bJSON\b/.test(exception.message);
 }
 
 /** Nest's own error bodies always carry statusCode and message; anything else was chosen by the thrower. */
