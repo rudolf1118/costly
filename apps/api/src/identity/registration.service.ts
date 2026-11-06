@@ -3,17 +3,10 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../platform/database/prisma.service';
 import { hashPassword } from './password';
 import type { RegisterInput } from './registration.schema';
+import { type UserProfile, userProfileFields } from './user-profile';
 
 /** What registration returns: the account, never its credentials. */
-const registeredUser = {
-  id: true,
-  email: true,
-  baseCurrency: true,
-  timezone: true,
-  createdAt: true,
-} satisfies Prisma.UserSelect;
-
-export type RegisteredUser = Prisma.UserGetPayload<{ select: typeof registeredUser }>;
+export type RegisteredUser = UserProfile;
 
 @Injectable()
 export class RegistrationService {
@@ -34,7 +27,7 @@ export class RegistrationService {
           timezone: input.timezone,
           baseCurrency: input.baseCurrency,
         },
-        select: registeredUser,
+        select: userProfileFields,
       });
     } catch (error) {
       if (isDuplicateEmail(error)) {

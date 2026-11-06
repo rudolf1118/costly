@@ -4,7 +4,7 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testconta
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { listenOnLoopback } from './support/http';
+import { startHttpServer } from './support/http';
 import { applyMigrations } from './support/migrations';
 
 describe('health endpoints', () => {
@@ -26,7 +26,7 @@ describe('health endpoints', () => {
     const { AppModule } = await import('../src/app.module');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
-    await listenOnLoopback(app);
+    await startHttpServer(app);
   });
 
   afterAll(async () => {

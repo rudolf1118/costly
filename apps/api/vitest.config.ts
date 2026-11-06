@@ -8,6 +8,10 @@ export default defineConfig({
   test: {
     include: ['src/**/*.spec.ts', 'test/**/*.spec.ts'],
     environment: 'node',
+    // Configuration every suite needs; suites set connection URLs themselves.
+    env: {
+      JWT_ACCESS_SECRET: 'test-only-secret-that-is-long-enough-for-hs256',
+    },
     // Integration tests start PostgreSQL and Redis containers (Testcontainers).
     hookTimeout: 120_000,
     testTimeout: 15_000,

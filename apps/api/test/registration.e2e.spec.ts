@@ -7,7 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { verifyPassword } from '../src/identity/password';
 import { PrismaService } from '../src/platform/database/prisma.service';
-import { listenOnLoopback } from './support/http';
+import { startHttpServer } from './support/http';
 import { applyMigrations } from './support/migrations';
 
 describe('POST /auth/register', () => {
@@ -30,7 +30,7 @@ describe('POST /auth/register', () => {
     const { AppModule } = await import('../src/app.module');
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
-    await listenOnLoopback(app);
+    await startHttpServer(app);
     prisma = app.get(PrismaService);
   });
 
