@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import type { Env } from '../platform/config/env.schema';
 import { DatabaseModule } from '../platform/database/database.module';
+import { RateLimitModule } from '../platform/rate-limit/rate-limit.module';
 import { AccessTokenGuard } from './access-token.guard';
 import { AccessTokenService } from './access-token.service';
 import { AuthenticationController } from './authentication.controller';
@@ -19,6 +20,7 @@ import { TrustedOriginGuard } from './trusted-origin.guard';
 @Module({
   imports: [
     DatabaseModule,
+    RateLimitModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       // Only the key is set here; AccessTokenService passes the algorithm,

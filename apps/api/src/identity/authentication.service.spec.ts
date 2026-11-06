@@ -18,7 +18,13 @@ describe('AuthenticationService.login', () => {
 
   async function serviceFinding(user: { id: string; passwordHash: string } | null) {
     const prisma = { user: { findUnique: vi.fn().mockResolvedValue(user) } };
-    const service = new AuthenticationService(prisma as never, {} as never, {} as never);
+    const limiter = { ensureBelow: vi.fn(), hit: vi.fn() };
+    const service = new AuthenticationService(
+      prisma as never,
+      {} as never,
+      {} as never,
+      limiter as never,
+    );
     await service.onModuleInit();
     return service;
   }

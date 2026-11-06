@@ -11,6 +11,9 @@ export default defineConfig({
     // Configuration every suite needs; suites set connection URLs themselves.
     env: {
       JWT_ACCESS_SECRET: 'test-only-secret-that-is-long-enough-for-hs256',
+      // Suites about other behaviour register and log in many times from one
+      // IP; the rate limit suites turn it back on.
+      AUTH_RATE_LIMIT: 'off',
     },
     // Integration tests start PostgreSQL and Redis containers (Testcontainers).
     hookTimeout: 120_000,

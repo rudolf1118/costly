@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import type { Env } from '../platform/config/env.schema';
 import { ZodValidationPipe } from '../platform/http/zod-validation.pipe';
+import { RateLimitGuard, RateLimitPerIp } from '../platform/rate-limit/rate-limit.guard';
 import {
   AccessTokenGuard,
   type AuthenticatedUser,
@@ -21,6 +22,7 @@ import {
   CurrentUser,
 } from './access-token.guard';
 import { AuthenticationService, type SessionTokens } from './authentication.service';
+import { LOGIN_PER_IP, REFRESH_PER_IP } from './auth-rate-limits';
 import { type LoginInput, loginSchema } from './login.schema';
 import { clearRefreshCookie, readRefreshCookie, setRefreshCookie } from './refresh-cookie';
 import { invalidRefreshSession } from './refresh-tokens.service';
@@ -48,7 +50,9 @@ export class AuthenticationController {
   /** 200 with an access token and the refresh cookie; 401 for any wrong credential. */
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(TrustedOriginGuard)
+  // Origin first: a cross-site page must not use up the victim's IP budget.
+  @UseGuards(TrustedOriginGuard, RateLimitGuard)
+  @RateLimitPerIp(LOGIN_PER_IP)
   async login(
     @Body(new ZodValidationPipe(loginSchema)) body: LoginInput,
     @Res({ passthrough: true }) response: Response,
@@ -63,7 +67,8 @@ export class AuthenticationController {
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(TrustedOriginGuard)
+  @UseGuards(TrustedOriginGuard, RateLimitGuard)
+  @RateLimitPerIp(REFRESH_PER_IP)
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,

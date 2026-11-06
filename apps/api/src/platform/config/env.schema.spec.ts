@@ -14,6 +14,8 @@ describe('validateEnv', () => {
       PORT: 3100,
       LOG_LEVEL: 'info',
       CORS_ORIGIN: 'http://localhost:5173',
+      TRUST_PROXY: 0,
+      AUTH_RATE_LIMIT: 'on',
       ...required,
     });
   });
@@ -53,6 +55,19 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...required, DATABASE_URL: 'mysql://localhost/costly' })).toThrow(
       /DATABASE_URL/,
     );
+  });
+
+  it('trusts no proxy unless told how many hops to trust', () => {
+    expect(validateEnv(required).TRUST_PROXY).toBe(0);
+    expect(validateEnv({ ...required, TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+    expect(() => validateEnv({ ...required, TRUST_PROXY: 'true' })).toThrow(/TRUST_PROXY/);
+  });
+
+  it('allows turning rate limiting off outside production only', () => {
+    expect(validateEnv({ ...required, AUTH_RATE_LIMIT: 'off' }).AUTH_RATE_LIMIT).toBe('off');
+    expect(() =>
+      validateEnv({ ...required, AUTH_RATE_LIMIT: 'off', NODE_ENV: 'production' }),
+    ).toThrow(/AUTH_RATE_LIMIT: Rate limiting cannot be turned off in production/);
   });
 
   it('lists every invalid variable in one error', () => {

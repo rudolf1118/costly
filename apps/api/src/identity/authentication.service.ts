@@ -1,8 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { Injectable, type OnModuleInit, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../platform/database/prisma.service';
+import { RateLimiter } from '../platform/rate-limit/rate-limiter.service';
 import { AccessTokenService } from './access-token.service';
 import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
+import { LOGIN_FAILURES_PER_ACCOUNT, loginFailuresKey } from './auth-rate-limits';
 import { hashPassword, verifyPassword } from './password';
 import { type IssuedRefreshToken, RefreshTokensService } from './refresh-tokens.service';
 import { type UserProfile, userProfileFields } from './user-profile';
@@ -23,6 +25,7 @@ export class AuthenticationService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly accessTokens: AccessTokenService,
     private readonly refreshTokens: RefreshTokensService,
+    private readonly limiter: RateLimiter,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -32,16 +35,23 @@ export class AuthenticationService implements OnModuleInit {
   /**
    * Checks credentials and starts a session. A wrong password and an unknown
    * email give the same 401 after the same amount of hashing work, so neither
-   * the response nor its timing reveals whether the account exists.
+   * the response nor its timing reveals whether the account exists. The
+   * account's failure budget is checked first, before any hashing; unknown
+   * emails have one too, so a 429 doesn't reveal existence either.
    */
   async login(email: string, password: string): Promise<SessionTokens> {
+    const failuresKey = loginFailuresKey(email);
+    await this.limiter.ensureBelow(failuresKey, LOGIN_FAILURES_PER_ACCOUNT);
     // citext: the lookup ignores case, as uniqueness does.
     const user = await this.prisma.user.findUnique({
       where: { email },
       select: { id: true, passwordHash: true },
     });
     const matches = await verifyPassword(user?.passwordHash ?? this.dummyHash, password);
-    if (!user || !matches) throw new UnauthorizedException('Invalid email or password.');
+    if (!user || !matches) {
+      await this.limiter.hit(failuresKey, LOGIN_FAILURES_PER_ACCOUNT.windowMs);
+      throw new UnauthorizedException('Invalid email or password.');
+    }
     return this.startSession(user.id);
   }
 

@@ -17,6 +17,13 @@ export const envSchema = z
     CORS_ORIGIN: z.url({ protocol: /^https?$/ }).default('http://localhost:5173'),
     /** HS256 key for access tokens (ADR-0006). Generate with: openssl rand -base64 48 */
     JWT_ACCESS_SECRET: z.string().min(32, 'Must be at least 32 characters'),
+    /**
+     * How many reverse proxies in front of the API may set X-Forwarded-For.
+     * 0 (default) ignores the header and uses the socket address (ADR-0006).
+     */
+    TRUST_PROXY: z.coerce.number().int().min(0).max(10).default(0),
+    /** Authentication rate limits. "off" exists for test suites and is refused in production. */
+    AUTH_RATE_LIMIT: z.enum(['on', 'off']).default('on'),
   })
   .superRefine((env, context) => {
     if (env.NODE_ENV === 'production' && env.JWT_ACCESS_SECRET === EXAMPLE_JWT_ACCESS_SECRET) {
@@ -24,6 +31,13 @@ export const envSchema = z
         code: 'custom',
         path: ['JWT_ACCESS_SECRET'],
         message: 'The example secret from .env.example cannot be used in production',
+      });
+    }
+    if (env.NODE_ENV === 'production' && env.AUTH_RATE_LIMIT === 'off') {
+      context.addIssue({
+        code: 'custom',
+        path: ['AUTH_RATE_LIMIT'],
+        message: 'Rate limiting cannot be turned off in production',
       });
     }
   });
