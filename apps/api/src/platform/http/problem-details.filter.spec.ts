@@ -154,7 +154,7 @@ describe('ProblemDetailsFilter', () => {
     expect(sent.status).toBe(500);
   });
 
-  it('logs a Prisma error by class and code only, never its message', () => {
+  it('logs a Prisma error with its stack frames but never its message', () => {
     const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const { sent, host } = capture();
     const secret = '$argon2id$v=19$m=65536,t=3,p=4$secret-hash';
@@ -169,6 +169,8 @@ describe('ProblemDetailsFilter', () => {
     expect(sent.status).toBe(500);
     const logged = JSON.stringify(log.mock.calls);
     expect(logged).toContain('PrismaClientValidationError');
+    // Where the query came from is kept: the stack frames, not the message.
+    expect(logged).toContain('problem-details.filter.spec.ts');
     expect(logged).not.toContain(secret);
     expect(JSON.stringify(sent.body)).not.toContain(secret);
   });

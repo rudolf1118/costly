@@ -123,13 +123,25 @@ function isCustomBody(body: string | object): boolean {
 
 /**
  * Prisma validation errors render the query arguments into their message
- * (a password hash, for example), whatever errorFormat is set, so for Prisma
- * errors only the class and code are logged.
+ * (a password hash, for example), whatever errorFormat is set. For Prisma
+ * errors the message is dropped: the class, the code and the stack frames
+ * (where the failing query was issued) are logged, the stack's first lines,
+ * which repeat the message, are not.
  */
 export function describeForLog(error: unknown): Record<string, unknown> {
   if (!(error instanceof Error)) return { type: typeof error };
   if (error.name.startsWith('PrismaClient')) {
-    return { type: error.name, code: (error as { code?: unknown }).code };
+    return {
+      type: error.name,
+      code: (error as { code?: unknown }).code,
+      stack: stackFrames(error.stack),
+    };
   }
   return { type: error.name, message: error.message, stack: error.stack };
+}
+
+/** The "    at ..." lines of a stack trace, without the message before them. */
+function stackFrames(stack: string | undefined): string | undefined {
+  const start = stack?.indexOf('\n    at ') ?? -1;
+  return start === -1 ? undefined : stack?.slice(start + 1);
 }
