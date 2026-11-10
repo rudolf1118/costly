@@ -9,6 +9,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { RateLimitExceededException } from '../rate-limit/rate-limiter.service';
 import { RequestValidationException, type ValidationIssue } from './zod-validation.pipe';
 
 /** An error response body as defined by RFC 9457 (which obsoletes RFC 7807). */
@@ -42,6 +43,9 @@ export class ProblemDetailsFilter implements ExceptionFilter {
       if (isCustomBody(body) && !(exception instanceof RequestValidationException)) {
         response.status(exception.getStatus()).json(body);
         return;
+      }
+      if (exception instanceof RateLimitExceededException) {
+        response.setHeader('Retry-After', String(exception.retryAfterSeconds));
       }
       if (exception.getStatus() >= 500) {
         this.logger.error({ msg: 'request failed', error: describeForLog(exception) });

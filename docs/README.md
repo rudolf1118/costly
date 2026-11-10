@@ -45,9 +45,10 @@ docs/
       0003-prisma-with-raw-sql-for-analytics.md
       0004-bullmq-over-rabbitmq.md
       0005-password-policy-and-argon2id.md
-      0006-transfers-as-paired-rows.md            (planned)
-      0007-dirty-marking-instead-of-outbox.md     (planned)
-      0008-sync-simulation-async-snapshots.md     (planned)
+      0006-authentication-and-refresh-sessions.md
+      0007-transfers-as-paired-rows.md            (planned)
+      0008-dirty-marking-instead-of-outbox.md     (planned)
+      0009-sync-simulation-async-snapshots.md     (planned)
       ...                          one ADR per significant decision, including rejected options
 
   04-database/

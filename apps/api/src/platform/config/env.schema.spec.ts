@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { validateEnv } from './env.schema';
+import { EXAMPLE_JWT_ACCESS_SECRET, validateEnv } from './env.schema';
 
 const required = {
   DATABASE_URL: 'postgresql://costly:costly@localhost:5432/costly',
   REDIS_URL: 'redis://localhost:6379',
+  JWT_ACCESS_SECRET: 'a-test-secret-that-is-long-enough-for-hs256',
 };
 
 describe('validateEnv', () => {
@@ -13,6 +14,8 @@ describe('validateEnv', () => {
       PORT: 3100,
       LOG_LEVEL: 'info',
       CORS_ORIGIN: 'http://localhost:5173',
+      TRUST_PROXY: 0,
+      AUTH_RATE_LIMIT: 'on',
       ...required,
     });
   });
@@ -21,8 +24,25 @@ describe('validateEnv', () => {
     expect(validateEnv({ ...required, PORT: '8080' }).PORT).toBe(8080);
   });
 
-  it('requires connection URLs', () => {
-    expect(() => validateEnv({})).toThrowError(/DATABASE_URL[\s\S]*REDIS_URL/);
+  it('requires connection URLs and the access token secret', () => {
+    expect(() => validateEnv({})).toThrowError(
+      /DATABASE_URL[\s\S]*REDIS_URL[\s\S]*JWT_ACCESS_SECRET/,
+    );
+  });
+
+  it('rejects an access token secret shorter than 32 characters', () => {
+    expect(() => validateEnv({ ...required, JWT_ACCESS_SECRET: 'too-short' })).toThrow(
+      /JWT_ACCESS_SECRET: Must be at least 32 characters/,
+    );
+  });
+
+  it('accepts the example secret in development but refuses it in production', () => {
+    const withExample = { ...required, JWT_ACCESS_SECRET: EXAMPLE_JWT_ACCESS_SECRET };
+
+    expect(validateEnv(withExample).JWT_ACCESS_SECRET).toBe(EXAMPLE_JWT_ACCESS_SECRET);
+    expect(() => validateEnv({ ...withExample, NODE_ENV: 'production' })).toThrow(
+      /JWT_ACCESS_SECRET: The example secret/,
+    );
   });
 
   it('rejects a CORS origin that is not an http(s) URL', () => {
@@ -35,6 +55,19 @@ describe('validateEnv', () => {
     expect(() => validateEnv({ ...required, DATABASE_URL: 'mysql://localhost/costly' })).toThrow(
       /DATABASE_URL/,
     );
+  });
+
+  it('trusts no proxy unless told how many hops to trust', () => {
+    expect(validateEnv(required).TRUST_PROXY).toBe(0);
+    expect(validateEnv({ ...required, TRUST_PROXY: '1' }).TRUST_PROXY).toBe(1);
+    expect(() => validateEnv({ ...required, TRUST_PROXY: 'true' })).toThrow(/TRUST_PROXY/);
+  });
+
+  it('allows turning rate limiting off outside production only', () => {
+    expect(validateEnv({ ...required, AUTH_RATE_LIMIT: 'off' }).AUTH_RATE_LIMIT).toBe('off');
+    expect(() =>
+      validateEnv({ ...required, AUTH_RATE_LIMIT: 'off', NODE_ENV: 'production' }),
+    ).toThrow(/AUTH_RATE_LIMIT: Rate limiting cannot be turned off in production/);
   });
 
   it('lists every invalid variable in one error', () => {
