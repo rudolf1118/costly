@@ -30,6 +30,14 @@ describe('minorUnits', () => {
     ['thousands separators', '150,000'],
     ['an empty string', ''],
     ['null', null],
+    ['a trailing newline', '150000\n'],
+    ['Arabic-Indic digits', '\u0661\u0665\u0660'],
+    ['fullwidth digits', '\uff11\uff15\uff10'],
+    ['an array', ['150000']],
+    ['an object', { value: '150000' }],
+    ['a boolean', true],
+    ['a bigint', 150_000n],
+    ['a 10,000-digit string', '9'.repeat(10_000)],
   ])('rejects %s', (_case, input) => {
     expect(minorUnits.safeParse(input).success).toBe(false);
   });

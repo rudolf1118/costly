@@ -613,6 +613,182 @@ describe('financial accounts', () => {
     });
   });
 
+  // Real concurrent requests against PostgreSQL. Each case runs several rounds;
+  // whatever the interleaving, no request may fail with a 500 and the stored
+  // state must match one of the serial orders.
+  describe('concurrent requests', () => {
+    const ROUNDS = 5;
+    const statuses = (responses: { status: number }[]) => responses.map((r) => r.status).sort();
+
+    it('restores exactly one of two archived accounts with the same name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const a = await createAccount(user, { name: 'Twin' });
+        await as(user).post(`/accounts/${a.id}/archive`).expect(200);
+        const b = await createAccount(user, { name: 'twin' });
+        await as(user).post(`/accounts/${b.id}/archive`).expect(200);
+
+        const responses = await Promise.all([
+          as(user).post(`/accounts/${a.id}/restore`),
+          as(user).post(`/accounts/${b.id}/restore`),
+        ]);
+
+        expect(statuses(responses)).toEqual([200, 409]);
+        await expect(
+          prisma.account.count({ where: { userId: user.id, archivedAt: null } }),
+        ).resolves.toBe(1);
+      }
+    });
+
+    it('lets only one of two concurrent renames take a name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const [a, b] = [await createAccount(user), await createAccount(user)];
+
+        const responses = await Promise.all([
+          as(user).patch(`/accounts/${a.id}`, { name: 'Wanted' }),
+          as(user).patch(`/accounts/${b.id}`, { name: 'WANTED' }),
+        ]);
+
+        expect(statuses(responses)).toEqual([200, 409]);
+      }
+    });
+
+    it('lets only one of a create and a restore take a name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const old = await createAccount(user, { name: 'Shared' });
+        await as(user).post(`/accounts/${old.id}/archive`).expect(200);
+
+        const responses = await Promise.all([
+          as(user).post(`/accounts/${old.id}/restore`),
+          as(user).post('/accounts', validAccount({ name: 'shared' })),
+        ]);
+
+        expect([
+          [200, 409],
+          [201, 409],
+        ]).toContainEqual(statuses(responses));
+        await expect(
+          prisma.account.count({ where: { userId: user.id, archivedAt: null } }),
+        ).resolves.toBe(1);
+      }
+    });
+
+    it('archives once when archive is requested concurrently', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () => as(user).post(`/accounts/${account.id}/archive`)),
+      );
+
+      expect(statuses(responses)).toEqual([200, 200, 200, 200, 200]);
+      const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      for (const res of responses)
+        expect(res.body.archivedAt).toBe(stored.archivedAt?.toISOString());
+    });
+
+    it('never applies an edit to an account archived concurrently', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const account = await createAccount(user, { name: 'Before' });
+
+        const [edit, archive] = await Promise.all([
+          as(user).patch(`/accounts/${account.id}`, { name: 'After' }),
+          as(user).post(`/accounts/${account.id}/archive`),
+        ]);
+
+        expect(archive.status).toBe(200);
+        expect([200, 409]).toContain(edit.status);
+        const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+        expect(stored.archivedAt).not.toBeNull();
+        // The edit either landed before the archive or not at all.
+        expect(stored.name).toBe(edit.status === 200 ? 'After' : 'Before');
+      }
+    });
+
+    it('ends archive-versus-restore in a consistent state', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const account = await createAccount(user);
+        await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+        const [restore, archive] = await Promise.all([
+          as(user).post(`/accounts/${account.id}/restore`),
+          as(user).post(`/accounts/${account.id}/archive`),
+        ]);
+
+        expect([restore.status, archive.status]).toEqual([200, 200]);
+        const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+        // Whichever ran last decided the state, and it said so.
+        const last = [restore, archive].find(
+          (res) => (res.body.archivedAt === null) === (stored.archivedAt === null),
+        );
+        expect(last).toBeDefined();
+      }
+    });
+  });
+
+  // Malformed transport input must end in a 4xx problem, never a 500.
+  describe('transport edge cases', () => {
+    const post = (user: User) =>
+      http().post('/accounts').set('Authorization', `Bearer ${user.token}`);
+
+    it('rejects malformed JSON with 400', async () => {
+      const res = await post(await newUser())
+        .set('Content-Type', 'application/json')
+        .send('{"name":')
+        .expect(400);
+      expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    });
+
+    it('rejects a body that is not JSON with 400', async () => {
+      await post(await newUser())
+        .set('Content-Type', 'text/plain')
+        .send('name=Main')
+        .expect(400);
+    });
+
+    it('rejects an oversized body with 413', async () => {
+      const res = await post(await newUser())
+        .send(validAccount({ name: 'x'.repeat(200_000) }))
+        .expect(413);
+      expect(res.body.status).toBe(413);
+    });
+
+    it.each([
+      ['a repeated status', '?status=active&status=all'],
+      ['an array-shaped status', '?status[]=active'],
+      ['an object-shaped status', '?status[a]=active'],
+      ['an unknown status', '?status=deleted'],
+      ['an unknown parameter', '?userId=00000000-0000-0000-0000-000000000000'],
+    ])('rejects %s in the list query', async (_case, query) => {
+      const user = await newUser();
+      await as(user).get(`/accounts${query}`).expect(400);
+    });
+
+    it('rejects a userId in the body: the owner comes only from the token', async () => {
+      const [user, other] = await Promise.all([newUser(), newUser()]);
+
+      await as(user)
+        .post('/accounts', validAccount({ userId: other.id }))
+        .expect(400);
+      await expect(prisma.account.count({ where: { userId: other.id } })).resolves.toBe(0);
+    });
+  });
+
+  describe('names across scripts and Unicode forms', () => {
+    it('treats Armenian names case-insensitively', async () => {
+      const user = await newUser();
+      await createAccount(user, { name: 'ԱՄԵՐԻԱԲԱՆԿ' });
+
+      await as(user)
+        .post('/accounts', validAccount({ name: 'ամերիաբանկ' }))
+        .expect(409);
+    });
+  });
+
   describe('two users', () => {
     it("never let one user see, change, archive or claim the other's accounts", async () => {
       const [anna, ben] = await Promise.all([newUser(), newUser()]);
