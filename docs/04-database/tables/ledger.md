@@ -31,7 +31,7 @@ There is **no balance column**: technical design §1.1 derives the balance from 
 | `accounts_currency_format_check` | `^[A-Z]{3}$` | ISO 4217 shape |
 | `accounts_opening_balance_range_check` | between ±999,999,999,999,999 | Below 2^53 (see the requirements document) |
 | `accounts_opening_date_check` | `>= 1900-01-01` | "Not in the future" depends on the clock and the user's time zone, so the API checks it. |
-| `accounts_archived_after_creation_check` | `archived_at IS NULL OR archived_at >= created_at` | Both timestamps come from the API's clock, because Prisma sets `created_at` on insert. Mixing in the database's `now()` broke this check whenever the database clock ran behind. |
+| `accounts_archived_after_creation_check` | `archived_at IS NULL OR archived_at >= created_at` | Prisma sets `created_at` from the clock of the API instance that inserted the row. Another instance, or the same host after NTP steps its clock back, may archive with an earlier clock, so archive stores the later of its own time and `created_at`. |
 | `accounts_user_id_id_idx` | index `(user_id, id)` | Every query is scoped by user; listings are ordered by id. |
 | `accounts_user_id_fkey` | `ON DELETE RESTRICT` | Accounts carry financial history, so a user who owns accounts can't be deleted by accident. |
 
@@ -39,7 +39,7 @@ There is **no balance column**: technical design §1.1 derives the balance from 
 
 - **Create:** inserts an active account for the authenticated user.
 - **Update:** changes `name`, `type` and `is_liquid` only, with one conditional `UPDATE ... WHERE id = $1 AND user_id = $2 AND archived_at IS NULL`.
-- **Archive and restore:** set or clear `archived_at` with one conditional `UPDATE` scoped by `(id, user_id)`. The time comes from the API's clock, the same one Prisma uses for `created_at`.
+- **Archive and restore:** set or clear `archived_at` with one conditional `UPDATE` scoped by `(id, user_id)`. Archive first reads the account, owner-scoped, to get `created_at`, and stores `max(now, created_at)`. The `UPDATE` also requires `archived_at IS NULL`, so of two concurrent archives only the first sets the time.
 - **Never changed:** `opening_balance`, `opening_date`, `currency` and `user_id`.
 - **Never deleted:** rows stay forever.
 
@@ -52,4 +52,4 @@ Transactions (task 6) will reference `accounts.id`. A balance at the end of day 
 ### Tests
 
 - `apps/api/test/accounts.schema.spec.ts` checks every constraint by SQLSTATE and name, against a fresh container.
-- `apps/api/test/accounts.e2e.spec.ts` covers the API: lifecycle, money, validation and two-user ownership.
+- `apps/api/test/accounts.e2e.spec.ts` covers the API: lifecycle, money, validation, two-user ownership, transport edge cases, clock skew in both directions, and concurrent creates, renames, archives and restores against real PostgreSQL.

@@ -611,6 +611,23 @@ describe('financial accounts', () => {
         .post(`/accounts/not-a-uuid/${action}`)
         .expect(400);
     });
+    // Several API instances, or one whose clock is stepped back by NTP, can
+    // archive with a clock behind the one that set created_at.
+    it('archives an account when the archiving clock runs behind the one that created it', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(account.createdAt as string).getTime() - 60_000);
+      try {
+        const res = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+        expect(new Date(res.body.archivedAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(account.createdAt as string).getTime(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 
   // Real concurrent requests against PostgreSQL. Each case runs several rounds;
@@ -687,6 +704,29 @@ describe('financial accounts', () => {
       const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
       for (const res of responses)
         expect(res.body.archivedAt).toBe(stored.archivedAt?.toISOString());
+    });
+
+    // Deterministic version of the race above: this request read the account
+    // as active, then another request archived it before this one's UPDATE.
+    it('keeps the first archive time when a concurrent archive wins the race', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+      const first = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+      const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      const staleRead = vi
+        .spyOn(prisma.account, 'findFirst')
+        .mockResolvedValueOnce({ ...stored, archivedAt: null } as never);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.now() + 60_000);
+      try {
+        const second = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+        expect(staleRead).toHaveBeenCalled();
+        expect(second.body.archivedAt).toBe(first.body.archivedAt);
+      } finally {
+        vi.useRealTimers();
+        staleRead.mockRestore();
+      }
     });
 
     it('never applies an edit to an account archived concurrently', async () => {

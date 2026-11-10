@@ -75,18 +75,24 @@ export class AccountsService {
 
   /**
    * Archives the account: kept for history, read-only, listed only on request.
-   * Idempotent: an archived account is returned unchanged. archived_at must
-   * not precede created_at, so both come from the same clock: the API's, as
-   * Prisma sets created_at on insert. (Taking archived_at from the database's
-   * now() broke whenever the database clock ran behind the API host's.)
+   * Idempotent: an archived account is returned unchanged.
+   *
+   * archived_at must not precede created_at (a CHECK), but the two can come
+   * from different clocks: another API instance, or this host after NTP steps
+   * its clock back. So archived_at is the later of now and created_at. The
+   * conditional UPDATE still decides the race with a concurrent archive.
    */
   async archive(userId: string, id: string): Promise<Account> {
+    const account = await this.get(userId, id);
+    if (account.archivedAt) return account;
+    const now = new Date();
     try {
       return await this.prisma.account.update({
         where: { id, userId, archivedAt: null },
-        data: { archivedAt: new Date() },
+        data: { archivedAt: now > account.createdAt ? now : account.createdAt },
       });
     } catch (error) {
+      // Archived by a concurrent request since the read: return that result.
       if (isRecordNotFound(error)) return this.get(userId, id);
       throw error;
     }
