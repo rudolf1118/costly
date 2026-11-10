@@ -30,6 +30,7 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
   refreshTokens RefreshToken[]
+  accounts      Account[]
 
   @@map("users")
 }
@@ -57,4 +58,40 @@ model RefreshToken {
   @@index([userId])
   @@index([familyId])
   @@map("refresh_tokens")
+}
+
+// ledger: where money lives (docs/02-requirements/ledger-accounts.md).
+enum AccountType {
+  checking
+  cash
+  savings
+  credit_card
+
+  @@map("account_type")
+}
+
+// ledger: a user's financial account. There is deliberately no balance
+// column: balances are derived from the opening balance and the ledger. The
+// name, currency, amount and date CHECKs and the unique active-name index
+// live in the migration SQL; see docs/04-database/tables/ledger.md.
+model Account {
+  id             String      @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId         String      @map("user_id") @db.Uuid
+  name           String
+  type           AccountType
+  /// ISO 4217; AMD only in v1 (ADR-0002).
+  currency       String      @db.Char(3)
+  /// Counts towards money available to spend; defaults from the type.
+  isLiquid       Boolean     @map("is_liquid")
+  /// Minor units (ADR-0002); the balance at the start of openingDate. May be negative.
+  openingBalance BigInt      @map("opening_balance")
+  openingDate    DateTime    @map("opening_date") @db.Date
+  archivedAt     DateTime?   @map("archived_at") @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, id])
+  @@map("accounts")
 }
