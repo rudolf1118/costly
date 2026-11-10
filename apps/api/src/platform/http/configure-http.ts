@@ -3,6 +3,7 @@ import type { Express } from 'express';
 import { ConfigService } from '@nestjs/config';
 import cookieParser from 'cookie-parser';
 import type { Env } from '../config/env.schema';
+import { bigintAsString } from '../money/minor-units';
 
 /**
  * HTTP settings that must be identical in production and in the e2e tests,
@@ -15,6 +16,8 @@ export function configureHttp(app: INestApplication): void {
   const hops = config.get('TRUST_PROXY', { infer: true });
   const express = app.getHttpAdapter().getInstance() as Express;
   express.set('trust proxy', hops > 0 ? hops : false);
+  // Money is bigint (ADR-0002); every response renders it as a decimal string.
+  express.set('json replacer', bigintAsString);
   // Parses the refresh cookie (ADR-0006).
   app.use(cookieParser());
   // The web client runs on its own origin. credentials: true lets it send and

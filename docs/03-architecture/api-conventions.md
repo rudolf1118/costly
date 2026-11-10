@@ -62,6 +62,14 @@ register(@Body(new ZodValidationPipe(registerSchema)) body: RegisterInput) { ...
   a client can't attempt to set `id` or `passwordHash`.
 - Issue messages never contain the submitted values, so a rejected password isn't echoed back.
 
+## Money
+
+Amounts are integer **minor units** (ADR-0002) and cross the API only as **decimal strings**: `"150000"` is 1,500 AMD.
+- **Requests:** an amount must match `^-?(0|[1-9][0-9]{0,14})$`, within ±999,999,999,999,999. JSON numbers, decimals, exponents, leading zeros, `+`, whitespace and `-0` get a 400; nothing is rounded.
+- **Responses:** every `bigint` is rendered as its exact string by one global serializer (Express's JSON replacer, set in `configureHttp`).
+
+Dates without a time, such as an account's opening date, are `YYYY-MM-DD`. Timestamps are ISO 8601 in UTC.
+
 ## Endpoints
 
 ### `POST /auth/register`
@@ -152,6 +160,49 @@ user keep working. An access token issued before logout stays valid until it exp
 
 Requires `Authorization: Bearer <accessToken>`. `200` returns
 `{ id, email, baseCurrency, timezone, createdAt }`.
+
+### Financial accounts
+
+Every `/accounts` route requires `Authorization: Bearer <accessToken>` and acts only on the caller's accounts. Behaviour, rules and their sources are in [`02-requirements/ledger-accounts.md`](../02-requirements/ledger-accounts.md).
+
+An account in a response:
+
+```json
+{
+  "id": "01a1b5c2-4d3e-7f60-8a1b-2c3d4e5f6a7b",
+  "name": "Main bank account",
+  "type": "checking",
+  "currency": "AMD",
+  "isLiquid": true,
+  "openingBalance": "250000",
+  "openingDate": "2026-01-01",
+  "archivedAt": null,
+  "createdAt": "2026-11-10T07:12:03.120Z",
+  "updatedAt": "2026-11-10T07:12:03.120Z"
+}
+```
+
+It never includes the owner id or a current balance. A balance can only be derived from the ledger, which doesn't exist yet.
+
+| Request | Body | Success | Errors |
+|---|---|---|---|
+| `POST /accounts` | `name`, `type` (`checking`, `cash`, `savings`, `credit_card`), `openingBalance`, `openingDate`; optional `currency` (`AMD`) and `isLiquid` | `201` + `Location: /accounts/:id` | 400; 409 name taken by an active account |
+| `GET /accounts?status=active\|archived\|all` | — | `200 { "items": [...] }`, oldest first; default `active` | 400 for an unknown status or parameter |
+| `GET /accounts/:id` | — | `200` account | 400 malformed id; 404 |
+| `PATCH /accounts/:id` | at least one of `name`, `type`, `isLiquid` | `200` account | 400 (including any other field); 404; 409 archived or name taken |
+| `POST /accounts/:id/archive` | — | `200` account; idempotent | 400; 404 |
+| `POST /accounts/:id/restore` | — | `200` account; idempotent | 400; 404; 409 name taken |
+
+A **404** is always `"Account not found."`, whether the account doesn't exist or belongs to someone else. All errors also include 401 for a missing or invalid access token.
+
+Example request:
+
+```http
+POST /accounts
+Authorization: Bearer <accessToken>
+
+{ "name": "Credit card", "type": "credit_card", "openingBalance": "-1250000", "openingDate": "2026-01-01" }
+```
 
 ## Authentication
 
