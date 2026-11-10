@@ -40,6 +40,14 @@ Notes worth keeping for the thesis:
   - Repeated runs exposed a two-clock bug. Prisma emulates `@default(now())` on the API host while
     archive used the database's `now()`, so `archived_at >= created_at` failed whenever Docker's
     clock lagged. Fixed by using one clock; a test pins it by running the API's clock ahead.
+- **Task 5 audit:**
+  - One clock is not enough. A second API instance, or NTP stepping the host clock back, could
+    still archive "before" creation, and the CHECK answered 500. Archive now stores
+    `max(now, created_at)`. A test runs the archiving clock a minute behind.
+  - "Café" typed with a combining accent passed as a second active account next to the
+    precomposed one. Names are now NFC-normalized, and a new migration adds a CHECK.
+  - A mutation check found the concurrent-archive test couldn't tell whether the `archived_at IS
+    NULL` guard was there. A deterministic stale-read test replaced reliance on timing.
 
 Next in Chapter 1: transactions and transfers (the ledger), categories and merchants, recurring
 rules, the first dashboard and seeded demo data, released as `v0.1.0`.
