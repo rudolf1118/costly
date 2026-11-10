@@ -1,0 +1,64 @@
+import { ConflictException, Injectable } from '@nestjs/common';
+import { type Account, Prisma } from '../../generated/prisma/client';
+import { PrismaService } from '../../platform/database/prisma.service';
+import {
+  type CreateAccountInput,
+  DEFAULT_LIQUIDITY,
+  type ListAccountsQuery,
+} from './account.schemas';
+
+/**
+ * Financial accounts. Every query carries the owner's id, taken by the caller
+ * from the verified access token, so no request can reach another user's
+ * account (docs/02-requirements/ledger-accounts.md).
+ */
+@Injectable()
+export class AccountsService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(userId: string, input: CreateAccountInput): Promise<Account> {
+    try {
+      return await this.prisma.account.create({
+        data: {
+          userId,
+          name: input.name,
+          type: input.type,
+          currency: input.currency,
+          isLiquid: input.isLiquid ?? DEFAULT_LIQUIDITY[input.type],
+          openingBalance: input.openingBalance,
+          openingDate: new Date(`${input.openingDate}T00:00:00Z`),
+        },
+      });
+    } catch (error) {
+      throw nameConflictOr(error);
+    }
+  }
+
+  /** The user's accounts in creation order (ids are time-ordered UUIDv7). */
+  list(userId: string, query: ListAccountsQuery): Promise<Account[]> {
+    const archived = {
+      active: { archivedAt: null },
+      archived: { archivedAt: { not: null } },
+      all: {},
+    }[query.status];
+    return this.prisma.account.findMany({ where: { userId, ...archived }, orderBy: { id: 'asc' } });
+  }
+}
+
+/**
+ * The partial unique index on (user_id, lower(name)) for active accounts is
+ * the authority on names, so concurrent requests can't create duplicates.
+ */
+export function nameConflictOr(error: unknown): unknown {
+  if (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002' &&
+    (
+      error.meta as
+        { driverAdapterError?: { cause?: { constraint?: { index?: string } } } } | undefined
+    )?.driverAdapterError?.cause?.constraint?.index === 'accounts_active_name_key'
+  ) {
+    return new ConflictException('An active account with this name already exists.');
+  }
+  return error;
+}
