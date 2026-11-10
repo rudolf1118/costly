@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../src/platform/database/prisma.service';
 import { startHttpServer } from './support/http';
 import { applyMigrations } from './support/migrations';
@@ -486,6 +486,26 @@ describe('financial accounts', () => {
         name: account.name,
       });
       await expect(prisma.account.count({ where: { id: account.id } })).resolves.toBe(1);
+    });
+
+    // archived_at must not precede created_at (a CHECK). Prisma sets created_at
+    // from the API host's clock, so archiving must use that clock too: with the
+    // database's now(), an API host running ahead broke the CHECK with a 500.
+    it("archives an account when the API host's clock runs ahead of the database's", async () => {
+      const user = await newUser();
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(Date.now() + 60_000);
+      try {
+        const account = await createAccount(user);
+
+        const res = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+        expect(new Date(res.body.archivedAt).getTime()).toBeGreaterThanOrEqual(
+          new Date(res.body.createdAt).getTime(),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('is idempotent: archiving again returns the account unchanged', async () => {
