@@ -13,6 +13,11 @@ class PingController {
   ping() {
     return { from: 'app under test' };
   }
+
+  @Get('money')
+  money() {
+    return { amount: 2n ** 62n, nested: [{ balance: -150_000n }] };
+  }
 }
 
 // ConfigModule because startHttpServer reads the CORS origin from configuration.
@@ -59,5 +64,11 @@ describe('startHttpServer', () => {
 
     expect(app.getHttpServer().listening).toBe(true);
     expect((app.getHttpServer().address() as AddressInfo).port).toBe(before);
+  });
+
+  it('serializes bigint money in any response as exact decimal strings', async () => {
+    const res = await request(app.getHttpServer()).get('/ping/money').expect(200);
+
+    expect(res.text).toBe('{"amount":"4611686018427387904","nested":[{"balance":"-150000"}]}');
   });
 });
