@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import {
   AccessTokenGuard,
@@ -64,5 +76,25 @@ export class AccountsController {
     @Body(new ZodValidationPipe(updateAccountSchema)) body: UpdateAccountInput,
   ): Promise<AccountResponse> {
     return toAccountResponse(await this.accounts.update(user.id, params.id, body));
+  }
+
+  /** Archives the account; repeating it changes nothing. 404 as above. */
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  async archive(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(accountParamsSchema)) params: AccountParams,
+  ): Promise<AccountResponse> {
+    return toAccountResponse(await this.accounts.archive(user.id, params.id));
+  }
+
+  /** Makes an archived account active again. 404 as above; 409 if the name is taken. */
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  async restore(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(accountParamsSchema)) params: AccountParams,
+  ): Promise<AccountResponse> {
+    return toAccountResponse(await this.accounts.restore(user.id, params.id));
   }
 }

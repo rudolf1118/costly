@@ -469,12 +469,164 @@ describe('financial accounts', () => {
     });
   });
 
+  describe('POST /accounts/:id/archive and /restore', () => {
+    it('archives the account without deleting it, keeping its money and details', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { openingBalance: '-500000' });
+
+      const res = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+      expect(res.body.archivedAt).not.toBeNull();
+      expect(new Date(res.body.archivedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(account.createdAt as string).getTime(),
+      );
+      expect(res.body).toMatchObject({
+        id: account.id,
+        openingBalance: '-500000',
+        name: account.name,
+      });
+      await expect(prisma.account.count({ where: { id: account.id } })).resolves.toBe(1);
+    });
+
+    it('is idempotent: archiving again returns the account unchanged', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+      const first = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+      const second = await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+      expect(second.body).toEqual(first.body);
+    });
+
+    it('hides archived accounts from the default list and shows them on request', async () => {
+      const user = await newUser();
+      const active = await createAccount(user, { name: 'Active' });
+      const archived = await createAccount(user, { name: 'Archived' });
+      await as(user).post(`/accounts/${archived.id}/archive`).expect(200);
+
+      const ids = async (query: string) =>
+        (await as(user).get(`/accounts${query}`).expect(200)).body.items.map(
+          (a: { id: string }) => a.id,
+        );
+
+      expect(await ids('')).toEqual([active.id]);
+      expect(await ids('?status=active')).toEqual([active.id]);
+      expect(await ids('?status=archived')).toEqual([archived.id]);
+      expect(await ids('?status=all')).toEqual([active.id, archived.id]);
+      await as(user).get(`/accounts/${archived.id}`).expect(200);
+    });
+
+    it('frees the name of an archived account for a new one', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { name: 'Main' });
+      await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+      await createAccount(user, { name: 'Main' });
+    });
+
+    it('restores an archived account to the active list', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+      await as(user).post(`/accounts/${account.id}/archive`).expect(200);
+
+      const res = await as(user).post(`/accounts/${account.id}/restore`).expect(200);
+
+      expect(res.body.archivedAt).toBeNull();
+      const list = await as(user).get('/accounts').expect(200);
+      expect(list.body.items.map((a: { id: string }) => a.id)).toEqual([account.id]);
+      await as(user).patch(`/accounts/${account.id}`, { name: 'Editable again' }).expect(200);
+    });
+
+    it('is idempotent: restoring an active account returns it unchanged', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+
+      const res = await as(user).post(`/accounts/${account.id}/restore`).expect(200);
+
+      expect(res.body).toEqual(account);
+    });
+
+    it('refuses to restore when an active account already has the name, leaving it archived', async () => {
+      const user = await newUser();
+      const old = await createAccount(user, { name: 'Main' });
+      await as(user).post(`/accounts/${old.id}/archive`).expect(200);
+      await createAccount(user, { name: 'MAIN' });
+
+      const res = await as(user).post(`/accounts/${old.id}/restore`).expect(409);
+
+      expect(res.body.detail).toBe('An active account with this name already exists.');
+      const stored = await prisma.account.findUniqueOrThrow({ where: { id: old.id } });
+      expect(stored.archivedAt).not.toBeNull();
+    });
+
+    it.each(['archive', 'restore'])(
+      "cannot %s another user's account, and says nothing about it",
+      async (action) => {
+        const [owner, intruder] = await Promise.all([newUser(), newUser()]);
+        const account = await createAccount(owner);
+        if (action === 'restore')
+          await as(owner).post(`/accounts/${account.id}/archive`).expect(200);
+        const before = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+
+        const res = await as(intruder).post(`/accounts/${account.id}/${action}`).expect(404);
+
+        expect(res.body).toEqual(notFound);
+        await expect(
+          prisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+        ).resolves.toEqual(before);
+      },
+    );
+
+    it.each(['archive', 'restore'])(
+      'answers 404 when asked to %s a missing account',
+      async (action) => {
+        await as(await newUser())
+          .post(`/accounts/${randomUUID()}/${action}`)
+          .expect(404);
+      },
+    );
+
+    it.each(['archive', 'restore'])('rejects a malformed id for %s', async (action) => {
+      await as(await newUser())
+        .post(`/accounts/not-a-uuid/${action}`)
+        .expect(400);
+    });
+  });
+
+  describe('two users', () => {
+    it("never let one user see, change, archive or claim the other's accounts", async () => {
+      const [anna, ben] = await Promise.all([newUser(), newUser()]);
+      const annas = await createAccount(anna, { name: 'Anna savings', type: 'savings' });
+      const bens = await createAccount(ben, { name: 'Ben wallet', type: 'cash' });
+
+      // Listing: each sees only their own.
+      expect((await as(anna).get('/accounts?status=all').expect(200)).body.items).toEqual([annas]);
+      expect((await as(ben).get('/accounts?status=all').expect(200)).body.items).toEqual([bens]);
+
+      // Every route on the other's account answers like a missing account.
+      for (const response of [
+        await as(anna).get(`/accounts/${bens.id}`),
+        await as(anna).patch(`/accounts/${bens.id}`, { name: 'Mine now' }),
+        await as(anna).post(`/accounts/${bens.id}/archive`),
+        await as(anna).post(`/accounts/${bens.id}/restore`),
+      ]) {
+        expect(response.status).toBe(404);
+        expect(response.body).toEqual(notFound);
+      }
+
+      // Nothing about Ben's account changed.
+      expect((await as(ben).get(`/accounts/${bens.id}`).expect(200)).body).toEqual(bens);
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['POST', '/accounts'],
       ['GET', '/accounts'],
       ['GET', `/accounts/${randomUUID()}`],
       ['PATCH', `/accounts/${randomUUID()}`],
+      ['POST', `/accounts/${randomUUID()}/archive`],
+      ['POST', `/accounts/${randomUUID()}/restore`],
     ])('rejects %s %s without an access token', async (method, path) => {
       const req =
         method === 'POST'
