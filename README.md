@@ -15,12 +15,10 @@ ledger     analytics       forecasting    goals · what-if · recommendations
 ```
 
 ## Status
-**Chapter 0 — foundation complete.** The pnpm monorepo, a NestJS API with a health endpoint that
-checks PostgreSQL and Redis, a React client that displays it, Docker Compose, GitHub Actions CI
-and the first four architecture decision records are in place. No financial features exist yet.
-
-**Chapter 1 — financial core** is next: authentication, accounts, categories, merchants,
-transactions and transfers, recurring rules, and a first dashboard, released as `v0.1.0`.
+**Chapter 1 — financial core, in progress.** Registration, login with rotating refresh sessions
+and rate limiting, and financial accounts (create, list, update, archive) are implemented.
+Transactions and transfers, categories, merchants, recurring rules and a first dashboard follow,
+released as `v0.1.0`. See the [progress log](docs/10-diploma/progress-log.md).
 
 ## Documents
 | Document | For |
