@@ -34,8 +34,12 @@ Notes worth keeping for the thesis:
     per-session advisory lock), a non-atomic account login limit, IPv6 per-IP bypass and an owner
     lockout.
   - Test parallelism was capped at four files after measuring container-start failures.
-- **Task 5:** Zod 4 runs later checks after a failed one. A malformed date reached `new Date()` and
-  caused a 500 until the format check was made to abort.
+- **Task 5:**
+  - Zod 4 runs later checks after a failed one. A malformed date reached `new Date()` and caused a
+    500 until the format check was made to abort.
+  - Repeated runs exposed a two-clock bug. Prisma emulates `@default(now())` on the API host while
+    archive used the database's `now()`, so `archived_at >= created_at` failed whenever Docker's
+    clock lagged. Fixed by using one clock; a test pins it by running the API's clock ahead.
 
 Next in Chapter 1: transactions and transfers (the ledger), categories and merchants, recurring
 rules, the first dashboard and seeded demo data, released as `v0.1.0`.
