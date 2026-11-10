@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import {
   AccessTokenGuard,
@@ -8,10 +8,14 @@ import {
 import { ZodValidationPipe } from '../../platform/http/zod-validation.pipe';
 import { type AccountResponse, toAccountResponse } from './account.response';
 import {
+  type AccountParams,
+  accountParamsSchema,
   type CreateAccountInput,
   createAccountSchema,
   type ListAccountsQuery,
   listAccountsQuerySchema,
+  type UpdateAccountInput,
+  updateAccountSchema,
 } from './account.schemas';
 import { AccountsService } from './accounts.service';
 
@@ -41,5 +45,24 @@ export class AccountsController {
   ): Promise<{ items: AccountResponse[] }> {
     const accounts = await this.accounts.list(user.id, query);
     return { items: accounts.map(toAccountResponse) };
+  }
+
+  /** The account, or 404 if it doesn't exist or belongs to someone else. */
+  @Get(':id')
+  async get(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(accountParamsSchema)) params: AccountParams,
+  ): Promise<AccountResponse> {
+    return toAccountResponse(await this.accounts.get(user.id, params.id));
+  }
+
+  /** Changes name, type or isLiquid. 404 as above; 409 if archived or the name is taken. */
+  @Patch(':id')
+  async update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(accountParamsSchema)) params: AccountParams,
+    @Body(new ZodValidationPipe(updateAccountSchema)) body: UpdateAccountInput,
+  ): Promise<AccountResponse> {
+    return toAccountResponse(await this.accounts.update(user.id, params.id, body));
   }
 }

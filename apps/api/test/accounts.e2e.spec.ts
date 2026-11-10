@@ -321,12 +321,167 @@ describe('financial accounts', () => {
     });
   });
 
+  const notFound = {
+    type: 'about:blank',
+    title: 'Not Found',
+    status: 404,
+    detail: 'Account not found.',
+  };
+
+  describe('GET /accounts/:id', () => {
+    it("returns the caller's account", async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { openingBalance: '-1250000' });
+
+      const res = await as(user).get(`/accounts/${account.id}`).expect(200);
+
+      expect(res.body).toEqual(account);
+    });
+
+    it("answers another user's account exactly like a missing one", async () => {
+      const [owner, intruder] = await Promise.all([newUser(), newUser()]);
+      const account = await createAccount(owner);
+
+      const foreign = await as(intruder).get(`/accounts/${account.id}`).expect(404);
+      const missing = await as(intruder).get(`/accounts/${randomUUID()}`).expect(404);
+
+      expect(foreign.body).toEqual(notFound);
+      expect(missing.body).toEqual(foreign.body);
+    });
+
+    it.each(['not-a-uuid', '123', "1' OR '1'='1"])(
+      'rejects the malformed id %j with 400',
+      async (id) => {
+        const res = await as(await newUser())
+          .get(`/accounts/${encodeURIComponent(id)}`)
+          .expect(400);
+
+        expect(res.body.errors).toEqual([{ path: 'id', message: 'Must be an account id (UUID)' }]);
+      },
+    );
+  });
+
+  describe('PATCH /accounts/:id', () => {
+    it('changes the name, type and isLiquid, and moves updatedAt', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { type: 'checking' });
+
+      const res = await as(user)
+        .patch(`/accounts/${account.id}`, { name: '  Renamed ', type: 'savings', isLiquid: true })
+        .expect(200);
+
+      expect(res.body).toMatchObject({ name: 'Renamed', type: 'savings', isLiquid: true });
+      expect(new Date(res.body.updatedAt).getTime()).toBeGreaterThan(
+        new Date(account.updatedAt as string).getTime(),
+      );
+      expect(res.body.openingBalance).toBe(account.openingBalance);
+    });
+
+    it('keeps isLiquid when only the type changes', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { type: 'checking' });
+
+      const res = await as(user).patch(`/accounts/${account.id}`, { type: 'savings' }).expect(200);
+
+      expect(res.body.isLiquid).toBe(true);
+    });
+
+    it.each([
+      ['openingBalance', '1'],
+      ['openingDate', '2025-01-01'],
+      ['currency', 'AMD'],
+      ['userId', randomUUID()],
+      ['archivedAt', null],
+      ['id', randomUUID()],
+    ])('refuses to change %s', async (field, value) => {
+      const user = await newUser();
+      const account = await createAccount(user);
+
+      await as(user)
+        .patch(`/accounts/${account.id}`, { [field]: value })
+        .expect(400);
+
+      const stored = await prisma.account.findUniqueOrThrow({ where: { id: account.id } });
+      expect(stored.openingBalance).toBe(250_000n);
+      expect(stored.userId).toBe(user.id);
+      expect(stored.archivedAt).toBeNull();
+    });
+
+    it('rejects an empty change', async () => {
+      const user = await newUser();
+      const account = await createAccount(user);
+
+      const res = await as(user).patch(`/accounts/${account.id}`, {}).expect(400);
+
+      expect(res.body.errors).toEqual([
+        { path: '', message: 'Provide at least one of: name, type, isLiquid' },
+      ]);
+    });
+
+    it("cannot change another user's account, and says nothing about it", async () => {
+      const [owner, intruder] = await Promise.all([newUser(), newUser()]);
+      const account = await createAccount(owner, { name: 'Original' });
+
+      const res = await as(intruder)
+        .patch(`/accounts/${account.id}`, { name: 'Taken over' })
+        .expect(404);
+
+      expect(res.body).toEqual(notFound);
+      await expect(
+        prisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      ).resolves.toMatchObject({ name: 'Original', userId: owner.id });
+    });
+
+    it('answers 404 for a missing account', async () => {
+      await as(await newUser())
+        .patch(`/accounts/${randomUUID()}`, { name: 'x' })
+        .expect(404);
+    });
+
+    it('answers 409 when renaming to the name of another active account', async () => {
+      const user = await newUser();
+      await createAccount(user, { name: 'Main' });
+      const other = await createAccount(user, { name: 'Other' });
+
+      const res = await as(user).patch(`/accounts/${other.id}`, { name: 'main' }).expect(409);
+
+      expect(res.body.detail).toBe('An active account with this name already exists.');
+    });
+
+    it('lets an account keep its own name in another case', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { name: 'Main' });
+
+      await as(user).patch(`/accounts/${account.id}`, { name: 'MAIN' }).expect(200);
+    });
+
+    it('answers 409 for an archived account and leaves it unchanged', async () => {
+      const user = await newUser();
+      const account = await createAccount(user, { name: 'Old' });
+      await prisma.account.update({ where: { id: account.id }, data: { archivedAt: new Date() } });
+
+      const res = await as(user).patch(`/accounts/${account.id}`, { name: 'New' }).expect(409);
+
+      expect(res.body.detail).toBe('The account is archived. Restore it before changing it.');
+      await expect(
+        prisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      ).resolves.toMatchObject({ name: 'Old' });
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['POST', '/accounts'],
       ['GET', '/accounts'],
+      ['GET', `/accounts/${randomUUID()}`],
+      ['PATCH', `/accounts/${randomUUID()}`],
     ])('rejects %s %s without an access token', async (method, path) => {
-      const req = method === 'POST' ? http().post(path).send(validAccount()) : http().get(path);
+      const req =
+        method === 'POST'
+          ? http().post(path).send(validAccount())
+          : method === 'PATCH'
+            ? http().patch(path).send({ name: 'x' })
+            : http().get(path);
 
       const res = await req.expect(401);
 

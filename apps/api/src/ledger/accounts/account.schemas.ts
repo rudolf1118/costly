@@ -73,3 +73,26 @@ export const listAccountsQuerySchema = z.strictObject({
 });
 
 export type ListAccountsQuery = z.output<typeof listAccountsQuerySchema>;
+
+/** The :id route parameter. A malformed id is a 400 and says nothing about any account. */
+export const accountParamsSchema = z.strictObject({
+  id: z.uuid({ error: 'Must be an account id (UUID)' }),
+});
+
+export type AccountParams = z.output<typeof accountParamsSchema>;
+
+/**
+ * The editable fields. Strict, so an attempt to change the opening balance,
+ * opening date, currency, owner or archive state is a 400, never ignored.
+ */
+export const updateAccountSchema = z
+  .strictObject({
+    name: accountName.optional(),
+    type: accountType.optional(),
+    isLiquid: z.boolean().optional(),
+  })
+  .refine((patch) => Object.values(patch).some((value) => value !== undefined), {
+    error: 'Provide at least one of: name, type, isLiquid',
+  });
+
+export type UpdateAccountInput = z.output<typeof updateAccountSchema>;

@@ -1,10 +1,11 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { type Account, Prisma } from '../../generated/prisma/client';
 import { PrismaService } from '../../platform/database/prisma.service';
 import {
   type CreateAccountInput,
   DEFAULT_LIQUIDITY,
   type ListAccountsQuery,
+  type UpdateAccountInput,
 } from './account.schemas';
 
 /**
@@ -43,6 +44,43 @@ export class AccountsService {
     }[query.status];
     return this.prisma.account.findMany({ where: { userId, ...archived }, orderBy: { id: 'asc' } });
   }
+
+  /** The user's account, or 404: a foreign account looks exactly like a missing one. */
+  async get(userId: string, id: string): Promise<Account> {
+    const account = await this.prisma.account.findFirst({ where: { id, userId } });
+    if (!account) throw accountNotFound();
+    return account;
+  }
+
+  /**
+   * Changes name, type or isLiquid. One conditional UPDATE matches only the
+   * user's active account, so a concurrent archive can never be overwritten
+   * with an edit. If nothing matched, an owner-scoped read tells "doesn't
+   * exist for you" (404) from "archived" (409).
+   */
+  async update(userId: string, id: string, patch: UpdateAccountInput): Promise<Account> {
+    try {
+      return await this.prisma.account.update({
+        where: { id, userId, archivedAt: null },
+        data: patch,
+      });
+    } catch (error) {
+      if (isRecordNotFound(error)) {
+        await this.get(userId, id);
+        throw new ConflictException('The account is archived. Restore it before changing it.');
+      }
+      throw nameConflictOr(error);
+    }
+  }
+}
+
+export function accountNotFound(): NotFoundException {
+  return new NotFoundException('Account not found.');
+}
+
+/** Prisma's P2025: the conditional update matched no row. */
+export function isRecordNotFound(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
 }
 
 /**
