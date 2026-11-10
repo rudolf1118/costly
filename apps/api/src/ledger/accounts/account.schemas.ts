@@ -13,12 +13,15 @@ export const DEFAULT_LIQUIDITY: Record<AccountType, boolean> = {
 const NAME_MAX = 64;
 
 /**
- * Trimmed, 1-64 characters counted as PostgreSQL's char_length does (code
- * points), with no control characters and no unpaired surrogates, which
- * would otherwise be stored silently as U+FFFD.
+ * NFC-normalized, so "Café" typed with a combining accent is the same name as
+ * the precomposed one (and the unique index sees them as equal). Trimmed,
+ * 1-64 characters counted as PostgreSQL's char_length does (code points),
+ * with no control characters and no unpaired surrogates, which would
+ * otherwise be stored silently as U+FFFD.
  */
 const accountName = z
   .string()
+  .normalize('NFC')
   .trim()
   .min(1, { error: 'Must not be empty' })
   .refine((name) => [...name].length <= NAME_MAX, {

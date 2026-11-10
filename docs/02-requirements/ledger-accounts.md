@@ -14,7 +14,7 @@ The rules below settle what those sources leave open. Each rule says which it is
 | Field | Rule | Source |
 |---|---|---|
 | `type` | `checking`, `cash`, `savings` or `credit_card` | technical design |
-| `name` | Trimmed, 1–64 characters, no control characters. Unique per user among **active** accounts, ignoring case. | uniqueness: technical design; the rest decided here |
+| `name` | Normalized to Unicode NFC, trimmed, 1–64 characters, no control characters. Unique per user among **active** accounts, ignoring case. | uniqueness: technical design; the rest decided here |
 | `currency` | `AMD` only in v1. It defaults to `AMD`; anything else is rejected. | product analysis: "schema-ready, single currency implemented" |
 | `isLiquid` | Defaults from the type: `checking`, `cash` and `credit_card` are liquid, `savings` isn't. Can be overridden at creation and later. | product analysis |
 | `openingBalance` | The balance at the start of `openingDate`, in minor units (see Money). It may be negative, for an overdraft or credit card debt. | sign decided here |

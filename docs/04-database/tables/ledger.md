@@ -27,6 +27,7 @@ There is **no balance column**: technical design §1.1 derives the balance from 
 | Name | Rule | Why |
 |---|---|---|
 | `accounts_name_check` | trimmed, 1–64 characters, no control characters | The API applies the same rules first. |
+| `accounts_name_nfc_check` | `name IS NFC NORMALIZED` | Added by `require_nfc_account_names`. Without it, a composed and a decomposed spelling of the same name ("Café") were two different names to the unique index. The API normalizes to NFC first. |
 | `accounts_active_name_key` | unique `(user_id, lower(name))` where `archived_at IS NULL` | A name is unique among a user's active accounts, ignoring case; archived accounts free their names. Concurrent creates can't duplicate a name. |
 | `accounts_currency_format_check` | `^[A-Z]{3}$` | ISO 4217 shape |
 | `accounts_opening_balance_range_check` | between ±999,999,999,999,999 | Below 2^53 (see the requirements document) |

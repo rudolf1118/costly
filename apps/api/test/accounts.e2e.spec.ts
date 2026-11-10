@@ -827,6 +827,23 @@ describe('financial accounts', () => {
         .post('/accounts', validAccount({ name: 'ամերիաբանկ' }))
         .expect(409);
     });
+
+    it('stores a decomposed name in composed (NFC) form', async () => {
+      const account = await createAccount(await newUser(), { name: 'Cafe\u0301' });
+
+      expect(account.name).toBe('Caf\u00e9');
+    });
+
+    it('treats composed and decomposed spellings of a name as the same name', async () => {
+      const user = await newUser();
+      const composed = 'Caf\u00e9';
+      const created = await createAccount(user, { name: composed });
+
+      await as(user)
+        .post('/accounts', validAccount({ name: 'Cafe\u0301' }))
+        .expect(409);
+      expect(created.name).toBe(composed);
+    });
   });
 
   describe('two users', () => {

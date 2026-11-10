@@ -59,13 +59,13 @@ describe('accounts table', () => {
               ${row.balance}, ${row.date}::date)`;
   }
 
-  it('is created by the third migration', async () => {
+  it('is created by the add_accounts migration and constrained by the NFC one', async () => {
     const rows = await prisma.$queryRaw<{ migration_name: string }[]>`
       SELECT migration_name FROM _prisma_migrations WHERE finished_at IS NOT NULL`;
+    const names = rows.map((row) => row.migration_name);
 
-    expect(rows.map((row) => row.migration_name)).toContainEqual(
-      expect.stringMatching(/^\d{14}_add_accounts$/),
-    );
+    expect(names).toContainEqual(expect.stringMatching(/^\d{14}_add_accounts$/));
+    expect(names).toContainEqual(expect.stringMatching(/^\d{14}_require_nfc_account_names$/));
   });
 
   it('stores an account with database-generated id and timestamps, and no balance column', async () => {
@@ -121,6 +121,13 @@ describe('accounts table', () => {
 
       expect(error.code).toBe('23514');
       expect(error.message).toContain('accounts_name_check');
+    });
+
+    it('rejects a name that is not in Unicode NFC form', async () => {
+      const error = await violation(insert(await newUser(), { name: 'Cafe\u0301' }));
+
+      expect(error.code).toBe('23514');
+      expect(error.message).toContain('accounts_name_nfc_check');
     });
 
     it('accepts 64 characters and non-Latin letters', async () => {
