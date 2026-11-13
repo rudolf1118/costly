@@ -706,9 +706,12 @@ describe('categories', () => {
           holding();
           await released;
         },
-        { timeout: 20_000 },
+        // Under a loaded test run, starting a transaction can take longer than
+        // Prisma's 2 s default.
+        { maxWait: 10_000, timeout: 20_000 },
       );
-      await held;
+      // A holder that fails to start must fail the test, not hang it.
+      await Promise.race([held, holder]);
 
       let finished = false;
       const response = send().then((res) => {
