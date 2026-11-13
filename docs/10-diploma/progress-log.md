@@ -18,7 +18,8 @@ measurement. The git history and the pull requests linked here are the evidence.
 | 2. User model | 2026-11-06 | #2 | `users` table and the first migration; case-insensitive email via `citext`. |
 | 3. Registration | 2026-11-06 | #3 | `POST /auth/register`, Argon2id (ADR-0005), RFC 9457 errors, zod validation. |
 | 4. Authentication | 2026-11-10 | #4 | Login, JWT access tokens, rotating refresh sessions, logout, guard, Redis rate limits (ADR-0006). |
-| 5. Financial accounts | in review | #5 | `accounts` table; create, list, read, update, archive and restore; money as minor-unit strings. |
+| 5. Financial accounts | 2026-11-10 | #5 | `accounts` table; create, list, read, update, archive and restore; money as minor-unit strings. |
+| 6. Categories | in review | #6 | `categories` table with 36 seeded system categories; two levels with `nature`; users' own categories, including under system parents; archive and restore with row locks. |
 
 Notes worth keeping for the thesis:
 - **Task 2:** Prisma's generated migration lacked `CREATE EXTENSION citext` and would have failed on
@@ -48,6 +49,20 @@ Notes worth keeping for the thesis:
     precomposed one. Names are now NFC-normalized, and a new migration adds a CHECK.
   - A mutation check found the concurrent-archive test couldn't tell whether the `archived_at IS
     NULL` guard was there. A deterministic stale-read test replaced reliance on timing.
+- **Task 6:**
+  - System categories are shared rows (`user_id IS NULL`), seeded by a migration with fixed ids
+    that sort before every UUIDv7, so one `ORDER BY id` lists them first.
+  - A unique index with `NULLS NOT DISTINCT` covers names: with plain `NULL`s, neither system nor
+    top-level names would have been unique.
+  - A trigger enforces the rules that span two rows: depth, parent kind, parent owner and
+    immutability.
+  - "An active category never has an archived parent" needs row locks: `FOR SHARE` on the parent
+    when adding a child, `FOR UPDATE` before counting children on archive.
+    - The round-based race tests caught a removed lock only by chance.
+    - Deterministic tests now hold the conflicting lock in a second transaction until PostgreSQL
+      reports the request waiting, so each removed lock fails every run.
+  - A test fixture set `archived_at` before Prisma set `created_at` and failed intermittently,
+    the same two-clock lesson as task 5.
 
-Next in Chapter 1: transactions and transfers (the ledger), categories and merchants, recurring
+Next in Chapter 1: merchants, transactions and transfers (the ledger), recurring
 rules, the first dashboard and seeded demo data, released as `v0.1.0`.

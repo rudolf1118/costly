@@ -1,6 +1,7 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { type Account, Prisma } from '../../generated/prisma/client';
+import type { Account } from '../../generated/prisma/client';
 import { PrismaService } from '../../platform/database/prisma.service';
+import { isRecordNotFound, isUniqueViolation } from '../prisma-errors';
 import {
   type CreateAccountInput,
   DEFAULT_LIQUIDITY,
@@ -119,25 +120,12 @@ export function accountNotFound(): NotFoundException {
   return new NotFoundException('Account not found.');
 }
 
-/** Prisma's P2025: the conditional update matched no row. */
-export function isRecordNotFound(error: unknown): boolean {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025';
-}
-
 /**
  * The partial unique index on (user_id, lower(name)) for active accounts is
  * the authority on names, so concurrent requests can't create duplicates.
  */
-export function nameConflictOr(error: unknown): unknown {
-  if (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002' &&
-    (
-      error.meta as
-        { driverAdapterError?: { cause?: { constraint?: { index?: string } } } } | undefined
-    )?.driverAdapterError?.cause?.constraint?.index === 'accounts_active_name_key'
-  ) {
-    return new ConflictException('An active account with this name already exists.');
-  }
-  return error;
+function nameConflictOr(error: unknown): unknown {
+  return isUniqueViolation(error, 'accounts_active_name_key')
+    ? new ConflictException('An active account with this name already exists.')
+    : error;
 }

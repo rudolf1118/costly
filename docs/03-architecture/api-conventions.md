@@ -204,6 +204,42 @@ Authorization: Bearer <accessToken>
 { "name": "Credit card", "type": "credit_card", "openingBalance": "-1250000", "openingDate": "2026-01-01" }
 ```
 
+### Categories
+
+Every `/categories` route requires `Authorization: Bearer <accessToken>`. Reads return the shared system categories and the caller's own; writes act only on the caller's own. Behaviour, rules and their sources are in [`02-requirements/ledger-categories.md`](../02-requirements/ledger-categories.md).
+
+A category in a response:
+
+```json
+{
+  "id": "01a1c9d0-5e6f-7a80-9b1c-2d3e4f5a6b7c",
+  "name": "Coffee",
+  "kind": "expense",
+  "nature": "discretionary",
+  "parentId": "00000000-0000-7000-8000-00000000000a",
+  "isSystem": false,
+  "archivedAt": null,
+  "createdAt": "2026-11-13T09:30:00.000Z",
+  "updatedAt": "2026-11-13T09:30:00.000Z"
+}
+```
+
+It never includes the owner id. `nature` is `null` exactly for income categories, and `parentId` is `null` at the top level.
+
+| Request | Body | Success | Errors |
+|---|---|---|---|
+| `GET /categories?kind=income\|expense&status=active\|archived\|all` | — | `200 { "items": [...] }`: system categories first in seed order, then the caller's own, oldest first; default `active`, both kinds | 400 for an unknown value or parameter |
+| `GET /categories/:id` | — | `200` category | 400 malformed id; 404 |
+| `POST /categories` | `name`, `kind`; `nature` for expense only; optional `parentId` (a top-level system category or the caller's own, same kind) | `201` + `Location: /categories/:id` | 400 (fields, including an unusable `parentId` or a `kind` other than the parent's); 409 name taken or parent archived |
+| `PATCH /categories/:id` | at least one of `name`, `nature` (expense only) | `200` category | 400 (including any other field); 403 system category; 404; 409 archived or name taken |
+| `POST /categories/:id/archive` | — | `200` category; idempotent | 400; 403; 404; 409 active subcategories |
+| `POST /categories/:id/restore` | — | `200` category; idempotent | 400; 403; 404; 409 name taken or parent archived |
+
+- **404** is always `"Category not found."`, whether the category doesn't exist or belongs to someone else.
+- **403** `"System categories can't be changed."` answers any change to a system category, which every user can see.
+- A `parentId` the caller can't use gets the same 400 message whether it is missing or another user's.
+- All errors also include 401 for a missing or invalid access token.
+
 ## Authentication
 
 Protected routes use `AccessTokenGuard` from the identity module and read the caller with
