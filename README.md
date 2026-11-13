@@ -16,9 +16,9 @@ ledger     analytics       forecasting    goals · what-if · recommendations
 
 ## Status
 **Chapter 1 — financial core, in progress.** Registration, login with rotating refresh sessions
-and rate limiting, and financial accounts (create, list, update, archive) are implemented.
-Transactions and transfers, categories, merchants, recurring rules and a first dashboard follow,
-released as `v0.1.0`. See the [progress log](docs/10-diploma/progress-log.md).
+and rate limiting, financial accounts and two-level categories (seeded system categories plus
+the user's own) are implemented. Merchants, transactions and transfers, recurring rules and a
+first dashboard follow, released as `v0.1.0`. See the [progress log](docs/10-diploma/progress-log.md).
 
 ## Documents
 | Document | For |
