@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { minorUnits } from '../../platform/money/minor-units';
+import { displayName } from '../display-name';
 import { AccountType } from '../../generated/prisma/client';
 
 /** checking, cash and credit_card count as money available to spend; savings doesn't. */
@@ -9,27 +10,6 @@ export const DEFAULT_LIQUIDITY: Record<AccountType, boolean> = {
   savings: false,
   credit_card: true,
 };
-
-const NAME_MAX = 64;
-
-/**
- * NFC-normalized, so "Café" typed with a combining accent is the same name as
- * the precomposed one (and the unique index sees them as equal). Trimmed,
- * 1-64 characters counted as PostgreSQL's char_length does (code points),
- * with no control characters and no unpaired surrogates, which would
- * otherwise be stored silently as U+FFFD.
- */
-const accountName = z
-  .string()
-  .normalize('NFC')
-  .trim()
-  .min(1, { error: 'Must not be empty' })
-  .refine((name) => [...name].length <= NAME_MAX, {
-    error: `Must be at most ${NAME_MAX} characters`,
-  })
-  .refine((name) => !/[\p{Cc}\p{Cs}]/u.test(name), {
-    error: 'Must not contain control characters or invalid Unicode',
-  });
 
 const accountType = z.enum(AccountType, {
   error: 'Must be one of: checking, cash, savings, credit_card',
@@ -60,7 +40,7 @@ const openingDate = z
 
 /** docs/02-requirements/ledger-accounts.md */
 export const createAccountSchema = z.strictObject({
-  name: accountName,
+  name: displayName,
   type: accountType,
   // v1 has a single currency (ADR-0002); the field exists so clients don't change later.
   currency: z.literal('AMD', { error: 'Only AMD is supported' }).default('AMD'),
@@ -90,7 +70,7 @@ export type AccountParams = z.output<typeof accountParamsSchema>;
  */
 export const updateAccountSchema = z
   .strictObject({
-    name: accountName.optional(),
+    name: displayName.optional(),
     type: accountType.optional(),
     isLiquid: z.boolean().optional(),
   })
