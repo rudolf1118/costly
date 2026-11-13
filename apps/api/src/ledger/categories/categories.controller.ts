@@ -1,4 +1,5 @@
-import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   AccessTokenGuard,
   type AuthenticatedUser,
@@ -9,8 +10,12 @@ import { type CategoryResponse, toCategoryResponse } from './category.response';
 import {
   type CategoryParams,
   categoryParamsSchema,
+  type CreateCategoryInput,
+  createCategorySchema,
   type ListCategoriesQuery,
   listCategoriesQuerySchema,
+  type UpdateCategoryInput,
+  updateCategorySchema,
 } from './category.schemas';
 import { CategoriesService } from './categories.service';
 
@@ -37,5 +42,27 @@ export class CategoriesController {
     @Param(new ZodValidationPipe(categoryParamsSchema)) params: CategoryParams,
   ): Promise<CategoryResponse> {
     return toCategoryResponse(await this.categories.get(user.id, params.id));
+  }
+
+  /** 201 with the category and its Location; 400 for an invalid body or parent; 409 if the name is taken or the parent archived. */
+  @Post()
+  async create(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body(new ZodValidationPipe(createCategorySchema)) body: CreateCategoryInput,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<CategoryResponse> {
+    const category = await this.categories.create(user.id, body);
+    response.location(`/categories/${category.id}`);
+    return toCategoryResponse(category);
+  }
+
+  /** Renames or changes the nature. 403 for a system category, 404 as above, 409 if archived or the name is taken. */
+  @Patch(':id')
+  async update(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(categoryParamsSchema)) params: CategoryParams,
+    @Body(new ZodValidationPipe(updateCategorySchema)) body: UpdateCategoryInput,
+  ): Promise<CategoryResponse> {
+    return toCategoryResponse(await this.categories.update(user.id, params.id, body));
   }
 }

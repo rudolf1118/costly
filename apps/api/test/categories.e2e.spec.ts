@@ -85,7 +85,34 @@ describe('categories', () => {
     });
   }
 
+  const validCategory = (overrides: Record<string, unknown> = {}) => ({
+    name: `Category ${randomUUID().slice(0, 8)}`,
+    kind: 'expense',
+    nature: 'discretionary',
+    ...overrides,
+  });
+
+  async function createCategory(user: User, overrides: Record<string, unknown> = {}) {
+    const res = await as(user).post('/categories', validCategory(overrides)).expect(201);
+    return res.body as { id: string; name: string } & Record<string, unknown>;
+  }
+
+  async function rejectedFields(user: User, body: object): Promise<string[]> {
+    const res = await as(user).post('/categories', body).expect(400);
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    return (res.body.errors as { path: string }[]).map((issue) => issue.path);
+  }
+
   const ids = (res: { body: { items: { id: string }[] } }) => res.body.items.map((c) => c.id);
+  const sorted = (responses: { status: number }[]) => responses.map((r) => r.status).sort();
+
+  const conflict = (detail: string) => ({
+    type: 'about:blank',
+    title: 'Conflict',
+    status: 409,
+    detail,
+  });
+  const NAME_TAKEN = 'An active category with this name already exists here.';
 
   const notFound = {
     type: 'about:blank',
@@ -215,12 +242,300 @@ describe('categories', () => {
     });
   });
 
+  describe('POST /categories', () => {
+    it('creates a top-level expense category with its Location', async () => {
+      const user = await newUser();
+
+      const res = await as(user)
+        .post('/categories', { name: 'Pets', kind: 'expense', nature: 'essential_variable' })
+        .expect(201);
+
+      expect(res.headers.location).toBe(`/categories/${res.body.id}`);
+      expect(res.body).toEqual({
+        id: expect.stringMatching(/^[0-9a-f]{8}-[0-9a-f]{4}-7/),
+        name: 'Pets',
+        kind: 'expense',
+        nature: 'essential_variable',
+        parentId: null,
+        isSystem: false,
+        archivedAt: null,
+        createdAt: expect.any(String),
+        updatedAt: expect.any(String),
+      });
+      await expect(
+        prisma.category.findUniqueOrThrow({ where: { id: res.body.id } }),
+      ).resolves.toMatchObject({ userId: user.id });
+    });
+
+    it('creates an income category, which has no nature', async () => {
+      const category = await createCategory(await newUser(), {
+        kind: 'income',
+        nature: undefined,
+        parentId: null,
+      });
+
+      expect(category).toMatchObject({ kind: 'income', nature: null, parentId: null });
+    });
+
+    it("creates a subcategory under a system category and under the user's own", async () => {
+      const user = await newUser();
+      const own = await createCategory(user);
+
+      const underSystem = await createCategory(user, { name: 'Coffee', parentId: FOOD });
+      const underOwn = await createCategory(user, { parentId: own.id });
+
+      expect(underSystem).toMatchObject({ parentId: FOOD, isSystem: false });
+      expect(underOwn).toMatchObject({ parentId: own.id });
+    });
+
+    it('normalizes the name to NFC and trims it, keeping Armenian text', async () => {
+      const user = await newUser();
+
+      expect((await createCategory(user, { name: '  Cafe\u0301  ' })).name).toBe('Caf\u00e9');
+      expect((await createCategory(user, { name: 'Սնունդ' })).name).toBe('Սնունդ');
+    });
+
+    describe('validation', () => {
+      it('lists every missing required field', async () => {
+        expect((await rejectedFields(await newUser(), {})).sort()).toEqual(['kind', 'name']);
+      });
+
+      it.each([
+        ['nature on an income category', { kind: 'income', nature: 'discretionary' }, 'nature'],
+        ['no nature on an expense category', { nature: undefined }, 'nature'],
+        ['an unknown kind', { kind: 'transfer' }, 'kind'],
+        ['an unknown nature', { nature: 'luxury' }, 'nature'],
+        ['an empty name', { name: '   ' }, 'name'],
+        ['a 65-character name', { name: 'a'.repeat(65) }, 'name'],
+        ['a name with a control character', { name: 'Pets\u0000' }, 'name'],
+        ['a name with an unpaired surrogate', { name: 'Pets \ud800' }, 'name'],
+        ['a malformed parentId', { parentId: 'food' }, 'parentId'],
+        ['an owner', { userId: randomUUID() }, ''],
+        ['a system flag', { isSystem: true }, ''],
+        ['an archive time', { archivedAt: new Date().toISOString() }, ''],
+      ])('rejects %s', async (_case, overrides, field) => {
+        expect(await rejectedFields(await newUser(), validCategory(overrides))).toEqual([field]);
+      });
+    });
+
+    describe('parent', () => {
+      const PARENT_UNKNOWN = 'Must be one of your categories or a system category';
+
+      it.each([
+        ['does not exist', async () => randomUUID()],
+        ['belongs to another user', async () => (await storedCategory(await newUser())).id],
+      ])('rejects a parent that %s, with the same answer', async (_case, parent) => {
+        const res = await as(await newUser())
+          .post('/categories', validCategory({ parentId: await parent() }))
+          .expect(400);
+
+        expect(res.body.errors).toEqual([{ path: 'parentId', message: PARENT_UNKNOWN }]);
+      });
+
+      it('rejects a third level', async () => {
+        const res = await as(await newUser())
+          .post('/categories', validCategory({ parentId: RESTAURANTS }))
+          .expect(400);
+
+        expect(res.body.errors).toEqual([
+          { path: 'parentId', message: 'Must be a top-level category' },
+        ]);
+      });
+
+      it("rejects a kind other than the parent's", async () => {
+        const res = await as(await newUser())
+          .post('/categories', validCategory({ parentId: SALARY }))
+          .expect(400);
+
+        expect(res.body.errors).toEqual([
+          { path: 'kind', message: "Must match the parent category's kind (income)" },
+        ]);
+      });
+
+      it('rejects an archived parent with 409', async () => {
+        const user = await newUser();
+        const parent = await storedCategory(user, { archivedAt: new Date() });
+
+        const res = await as(user)
+          .post('/categories', validCategory({ parentId: parent.id }))
+          .expect(409);
+
+        expect(res.body).toEqual(conflict('The parent category is archived.'));
+      });
+    });
+
+    describe('names', () => {
+      it('answers 409 for an active sibling with the same name in any case or Unicode form', async () => {
+        const user = await newUser();
+        await createCategory(user, { name: 'Café', parentId: FOOD });
+
+        for (const name of ['CAFÉ', 'Cafe\u0301']) {
+          const res = await as(user)
+            .post('/categories', validCategory({ name, parentId: FOOD }))
+            .expect(409);
+          expect(res.body).toEqual(conflict(NAME_TAKEN));
+        }
+      });
+
+      it('allows the name of a system category, another kind, another parent or another user', async () => {
+        const user = await newUser();
+
+        await createCategory(user, { name: 'Food' });
+        await createCategory(user, { name: 'Restaurants', parentId: FOOD });
+        await createCategory(user, { name: 'Gifts', kind: 'income', nature: undefined });
+        await createCategory(user, { name: 'Gifts' });
+        await createCategory(await newUser(), { name: 'Food' });
+      });
+
+      it('creates exactly one category when the same name is submitted concurrently', async () => {
+        const user = await newUser();
+
+        const responses = await Promise.all(
+          Array.from({ length: 5 }, () =>
+            as(user).post('/categories', validCategory({ name: 'Race', parentId: FOOD })),
+          ),
+        );
+
+        expect(sorted(responses)).toEqual([201, 409, 409, 409, 409]);
+        await expect(prisma.category.count({ where: { userId: user.id } })).resolves.toBe(1);
+      });
+    });
+  });
+
+  describe('PATCH /categories/:id', () => {
+    it('renames the category and changes its nature', async () => {
+      const user = await newUser();
+      const category = await createCategory(user, { name: 'Pets' });
+
+      const res = await as(user)
+        .patch(`/categories/${category.id}`, { name: 'Pet care', nature: 'essential_variable' })
+        .expect(200);
+
+      expect(res.body).toMatchObject({ name: 'Pet care', nature: 'essential_variable' });
+      expect(new Date(res.body.updatedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(category.updatedAt as string).getTime(),
+      );
+    });
+
+    it('lets a category change the case of its own name', async () => {
+      const user = await newUser();
+      const category = await createCategory(user, { name: 'pets' });
+
+      await as(user).patch(`/categories/${category.id}`, { name: 'Pets' }).expect(200);
+    });
+
+    it('answers 409 for a name taken by an active sibling', async () => {
+      const user = await newUser();
+      await createCategory(user, { name: 'Pets' });
+      const category = await createCategory(user);
+
+      const res = await as(user).patch(`/categories/${category.id}`, { name: 'PETS' }).expect(409);
+
+      expect(res.body).toEqual(conflict(NAME_TAKEN));
+    });
+
+    it('refuses to change a system category with 403', async () => {
+      const res = await as(await newUser())
+        .patch(`/categories/${FOOD}`, { name: 'Groceries and more' })
+        .expect(403);
+
+      expect(res.body).toEqual({
+        type: 'about:blank',
+        title: 'Forbidden',
+        status: 403,
+        detail: "System categories can't be changed.",
+      });
+      await expect(
+        prisma.category.findUniqueOrThrow({ where: { id: FOOD } }),
+      ).resolves.toMatchObject({ name: 'Food' });
+    });
+
+    it("cannot change another user's category, and says nothing about it", async () => {
+      const owner = await newUser();
+      const category = await storedCategory(owner);
+
+      const res = await as(await newUser())
+        .patch(`/categories/${category.id}`, { name: 'Mine now' })
+        .expect(404);
+
+      expect(res.body).toEqual(notFound);
+      await expect(
+        prisma.category.findUniqueOrThrow({ where: { id: category.id } }),
+      ).resolves.toEqual(category);
+    });
+
+    it('refuses to change an archived category', async () => {
+      const user = await newUser();
+      const category = await storedCategory(user, { archivedAt: new Date() });
+
+      const res = await as(user).patch(`/categories/${category.id}`, { name: 'x' }).expect(409);
+
+      expect(res.body).toEqual(
+        conflict('The category is archived. Restore it before changing it.'),
+      );
+    });
+
+    it('rejects a nature for an income category', async () => {
+      const user = await newUser();
+      const category = await createCategory(user, { kind: 'income', nature: undefined });
+
+      const res = await as(user)
+        .patch(`/categories/${category.id}`, { nature: 'discretionary' })
+        .expect(400);
+
+      expect(res.body.errors).toEqual([
+        { path: 'nature', message: 'Income categories have no nature' },
+      ]);
+    });
+
+    it.each([
+      ['an empty body', {}],
+      ['a kind', { kind: 'income' }],
+      ['a parent', { parentId: FOOD }],
+      ['an owner', { userId: randomUUID() }],
+      ['a system flag', { isSystem: true }],
+      ['an archive time', { archivedAt: null }],
+      ['a null nature', { nature: null }],
+    ])('rejects %s', async (_case, body) => {
+      const user = await newUser();
+      const category = await createCategory(user);
+
+      await as(user).patch(`/categories/${category.id}`, body).expect(400);
+      await expect(
+        prisma.category.findUniqueOrThrow({ where: { id: category.id } }),
+      ).resolves.toMatchObject({ kind: 'expense', parentId: null, userId: user.id });
+    });
+
+    it('lets only one of two concurrent renames take a name', async () => {
+      for (let round = 0; round < 5; round++) {
+        const user = await newUser();
+        const [a, b] = [await createCategory(user), await createCategory(user)];
+
+        const responses = await Promise.all([
+          as(user).patch(`/categories/${a.id}`, { name: 'Wanted' }),
+          as(user).patch(`/categories/${b.id}`, { name: 'WANTED' }),
+        ]);
+
+        expect(sorted(responses)).toEqual([200, 409]);
+      }
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['GET', '/categories'],
       ['GET', `/categories/${FOOD}`],
+      ['POST', '/categories'],
+      ['PATCH', `/categories/${FOOD}`],
     ])('rejects %s %s without an access token', async (method, path) => {
-      const res = await http().get(path).expect(401);
+      const req =
+        method === 'POST'
+          ? http().post(path).send(validCategory())
+          : method === 'PATCH'
+            ? http().patch(path).send({ name: 'x' })
+            : http().get(path);
+
+      const res = await req.expect(401);
 
       expect(res.headers['www-authenticate']).toBe('Bearer realm="costly"');
     });
