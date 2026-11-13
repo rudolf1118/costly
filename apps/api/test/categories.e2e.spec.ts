@@ -72,7 +72,11 @@ describe('categories', () => {
       http().patch(path).set('Authorization', `Bearer ${user.token}`).send(body),
   });
 
-  /** A user's own category written straight to the database. */
+  /**
+   * A user's own category written straight to the database. An archived one
+   * gets the same creation time, since Prisma would otherwise set created_at
+   * after archived_at and break the archive-after-creation CHECK.
+   */
   function storedCategory(user: User, data: Partial<Prisma.CategoryUncheckedCreateInput> = {}) {
     return prisma.category.create({
       data: {
@@ -80,6 +84,7 @@ describe('categories', () => {
         name: `Category ${randomUUID().slice(0, 8)}`,
         kind: 'expense',
         nature: 'discretionary',
+        ...(data.archivedAt ? { createdAt: data.archivedAt } : {}),
         ...data,
       },
     });
