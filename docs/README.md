@@ -50,6 +50,7 @@ docs/
       0007-transfers-as-paired-rows.md            (planned)
       0008-dirty-marking-instead-of-outbox.md     (planned)
       0009-sync-simulation-async-snapshots.md     (planned)
+      0010-web-client-architecture.md
       ...                          one ADR per significant decision, including rejected options
 
   04-database/
