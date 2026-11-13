@@ -1,4 +1,16 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import type { Response } from 'express';
 import {
   AccessTokenGuard,
@@ -64,5 +76,25 @@ export class CategoriesController {
     @Body(new ZodValidationPipe(updateCategorySchema)) body: UpdateCategoryInput,
   ): Promise<CategoryResponse> {
     return toCategoryResponse(await this.categories.update(user.id, params.id, body));
+  }
+
+  /** Archives the category; repeating it changes nothing. 403, 404 as above; 409 with active subcategories. */
+  @Post(':id/archive')
+  @HttpCode(HttpStatus.OK)
+  async archive(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(categoryParamsSchema)) params: CategoryParams,
+  ): Promise<CategoryResponse> {
+    return toCategoryResponse(await this.categories.archive(user.id, params.id));
+  }
+
+  /** Makes an archived category active again. 403, 404 as above; 409 if the name is taken or the parent archived. */
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  async restore(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param(new ZodValidationPipe(categoryParamsSchema)) params: CategoryParams,
+  ): Promise<CategoryResponse> {
+    return toCategoryResponse(await this.categories.restore(user.id, params.id));
   }
 }

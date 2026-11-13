@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing';
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { RedisContainer, type StartedRedisContainer } from '@testcontainers/redis';
 import request from 'supertest';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { Prisma } from '../src/generated/prisma/client';
 import { PrismaService } from '../src/platform/database/prisma.service';
 import { startHttpServer } from './support/http';
@@ -526,12 +526,348 @@ describe('categories', () => {
     });
   });
 
+  /** Active categories under an archived parent: the lifecycle rules forbid any. */
+  async function orphans(userId: string): Promise<number> {
+    const [row] = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*) FROM categories c JOIN categories p ON p.id = c.parent_id
+      WHERE c.user_id = ${userId}::uuid AND c.archived_at IS NULL AND p.archived_at IS NOT NULL`;
+    return Number(row?.count);
+  }
+
+  describe('POST /categories/:id/archive and /restore', () => {
+    it('archives the category without deleting it', async () => {
+      const user = await newUser();
+      const category = await createCategory(user, { parentId: FOOD });
+
+      const res = await as(user).post(`/categories/${category.id}/archive`).expect(200);
+
+      expect(res.body.archivedAt).not.toBeNull();
+      expect(new Date(res.body.archivedAt).getTime()).toBeGreaterThanOrEqual(
+        new Date(category.createdAt as string).getTime(),
+      );
+      expect(ids(await as(user).get('/categories').expect(200))).not.toContain(category.id);
+      expect(ids(await as(user).get('/categories?status=archived').expect(200))).toEqual([
+        category.id,
+      ]);
+      await as(user).get(`/categories/${category.id}`).expect(200);
+    });
+
+    it('is idempotent: archiving again returns the category unchanged', async () => {
+      const user = await newUser();
+      const category = await createCategory(user);
+      const first = await as(user).post(`/categories/${category.id}/archive`).expect(200);
+
+      const second = await as(user).post(`/categories/${category.id}/archive`).expect(200);
+
+      expect(second.body).toEqual(first.body);
+    });
+
+    it('refuses to archive a top-level category with active subcategories', async () => {
+      const user = await newUser();
+      const parent = await createCategory(user);
+      const child = await createCategory(user, { parentId: parent.id });
+
+      const res = await as(user).post(`/categories/${parent.id}/archive`).expect(409);
+
+      expect(res.body).toEqual(
+        conflict('The category has active subcategories. Archive them first.'),
+      );
+      await as(user).post(`/categories/${child.id}/archive`).expect(200);
+      await as(user).post(`/categories/${parent.id}/archive`).expect(200);
+    });
+
+    it("archives a category whose clock-skewed creation time is in this host's future", async () => {
+      const user = await newUser();
+      const category = await createCategory(user);
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(category.createdAt as string).getTime() - 60_000);
+      try {
+        const res = await as(user).post(`/categories/${category.id}/archive`).expect(200);
+
+        expect(res.body.archivedAt).toBe(category.createdAt);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('frees the name of an archived category, and restores it to the active list', async () => {
+      const user = await newUser();
+      const category = await createCategory(user, { name: 'Pets' });
+      await as(user).post(`/categories/${category.id}/archive`).expect(200);
+      const replacement = await createCategory(user, { name: 'Pets' });
+      await as(user).post(`/categories/${replacement.id}/archive`).expect(200);
+
+      const res = await as(user).post(`/categories/${category.id}/restore`).expect(200);
+
+      expect(res.body.archivedAt).toBeNull();
+      await as(user).patch(`/categories/${category.id}`, { name: 'Pets again' }).expect(200);
+    });
+
+    it('is idempotent: restoring an active category returns it unchanged', async () => {
+      const user = await newUser();
+      const category = await createCategory(user);
+
+      const res = await as(user).post(`/categories/${category.id}/restore`).expect(200);
+
+      expect(res.body).toEqual(category);
+    });
+
+    it('refuses to restore when an active sibling has the name, leaving it archived', async () => {
+      const user = await newUser();
+      const old = await createCategory(user, { name: 'Pets' });
+      await as(user).post(`/categories/${old.id}/archive`).expect(200);
+      await createCategory(user, { name: 'PETS' });
+
+      const res = await as(user).post(`/categories/${old.id}/restore`).expect(409);
+
+      expect(res.body).toEqual(conflict(NAME_TAKEN));
+      const stored = await prisma.category.findUniqueOrThrow({ where: { id: old.id } });
+      expect(stored.archivedAt).not.toBeNull();
+    });
+
+    it('refuses to restore a subcategory while its parent is archived', async () => {
+      const user = await newUser();
+      const parent = await createCategory(user);
+      const child = await createCategory(user, { parentId: parent.id });
+      await as(user).post(`/categories/${child.id}/archive`).expect(200);
+      await as(user).post(`/categories/${parent.id}/archive`).expect(200);
+
+      const res = await as(user).post(`/categories/${child.id}/restore`).expect(409);
+
+      expect(res.body).toEqual(conflict('The parent category is archived. Restore it first.'));
+      await as(user).post(`/categories/${parent.id}/restore`).expect(200);
+      await as(user).post(`/categories/${child.id}/restore`).expect(200);
+    });
+
+    it.each(['archive', 'restore'])('refuses to %s a system category with 403', async (action) => {
+      const res = await as(await newUser())
+        .post(`/categories/${FOOD}/${action}`)
+        .expect(403);
+
+      expect(res.body.detail).toBe("System categories can't be changed.");
+      await expect(
+        prisma.category.findUniqueOrThrow({ where: { id: FOOD } }),
+      ).resolves.toMatchObject({ archivedAt: null });
+    });
+
+    it.each(['archive', 'restore'])(
+      "cannot %s another user's category, and says nothing about it",
+      async (action) => {
+        const category = await storedCategory(await newUser(), {
+          archivedAt: action === 'restore' ? new Date() : null,
+        });
+
+        const res = await as(await newUser())
+          .post(`/categories/${category.id}/${action}`)
+          .expect(404);
+
+        expect(res.body).toEqual(notFound);
+        await expect(
+          prisma.category.findUniqueOrThrow({ where: { id: category.id } }),
+        ).resolves.toEqual(category);
+      },
+    );
+
+    it.each(['archive', 'restore'])(
+      'answers 404 for a missing id and 400 for a malformed one on %s',
+      async (action) => {
+        const user = await newUser();
+
+        await as(user).post(`/categories/${randomUUID()}/${action}`).expect(404);
+        await as(user).post(`/categories/nope/${action}`).expect(400);
+      },
+    );
+  });
+
+  // Real concurrent requests against PostgreSQL. Each case runs several rounds;
+  // whatever the interleaving, no request may fail with a 500 and the stored
+  // state must match one of the serial orders.
+  describe('concurrent requests', () => {
+    const ROUNDS = 5;
+
+    it('never leaves a new subcategory under a parent archived at the same time', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const parent = await createCategory(user);
+
+        const [create, archive] = await Promise.all([
+          as(user).post('/categories', validCategory({ parentId: parent.id })),
+          as(user).post(`/categories/${parent.id}/archive`),
+        ]);
+
+        expect([
+          [201, 409],
+          [409, 200],
+        ]).toContainEqual([create.status, archive.status]);
+        expect(await orphans(user.id)).toBe(0);
+      }
+    });
+
+    it('never restores a subcategory under a parent archived at the same time', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const parent = await createCategory(user);
+        const child = await createCategory(user, { parentId: parent.id });
+        await as(user).post(`/categories/${child.id}/archive`).expect(200);
+
+        const [restore, archive] = await Promise.all([
+          as(user).post(`/categories/${child.id}/restore`),
+          as(user).post(`/categories/${parent.id}/archive`),
+        ]);
+
+        expect([
+          [200, 409],
+          [409, 200],
+        ]).toContainEqual([restore.status, archive.status]);
+        expect(await orphans(user.id)).toBe(0);
+      }
+    });
+
+    it('restores exactly one of two archived categories with the same name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const a = await createCategory(user, { name: 'Twin' });
+        await as(user).post(`/categories/${a.id}/archive`).expect(200);
+        const b = await createCategory(user, { name: 'twin' });
+        await as(user).post(`/categories/${b.id}/archive`).expect(200);
+
+        const responses = await Promise.all([
+          as(user).post(`/categories/${a.id}/restore`),
+          as(user).post(`/categories/${b.id}/restore`),
+        ]);
+
+        expect(sorted(responses)).toEqual([200, 409]);
+      }
+    });
+
+    it('lets only one of a create and a restore take a name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const old = await createCategory(user, { name: 'Shared' });
+        await as(user).post(`/categories/${old.id}/archive`).expect(200);
+
+        const responses = await Promise.all([
+          as(user).post(`/categories/${old.id}/restore`),
+          as(user).post('/categories', validCategory({ name: 'shared' })),
+        ]);
+
+        expect([
+          [200, 409],
+          [201, 409],
+        ]).toContainEqual(sorted(responses));
+        await expect(
+          prisma.category.count({ where: { userId: user.id, archivedAt: null } }),
+        ).resolves.toBe(1);
+      }
+    });
+
+    it('lets only one of a rename and a restore take a name', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const old = await createCategory(user, { name: 'Shared' });
+        await as(user).post(`/categories/${old.id}/archive`).expect(200);
+        const other = await createCategory(user);
+
+        const responses = await Promise.all([
+          as(user).post(`/categories/${old.id}/restore`),
+          as(user).patch(`/categories/${other.id}`, { name: 'SHARED' }),
+        ]);
+
+        expect(sorted(responses)).toEqual([200, 409]);
+      }
+    });
+
+    it('archives once when archive is requested concurrently', async () => {
+      const user = await newUser();
+      const category = await createCategory(user);
+
+      const responses = await Promise.all(
+        Array.from({ length: 5 }, () => as(user).post(`/categories/${category.id}/archive`)),
+      );
+
+      expect(sorted(responses)).toEqual([200, 200, 200, 200, 200]);
+      const stored = await prisma.category.findUniqueOrThrow({ where: { id: category.id } });
+      for (const res of responses)
+        expect(res.body.archivedAt).toBe(stored.archivedAt?.toISOString());
+    });
+
+    it('never applies an edit to a category archived concurrently', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const category = await createCategory(user, { name: 'Before' });
+
+        const [edit, archive] = await Promise.all([
+          as(user).patch(`/categories/${category.id}`, { name: 'After' }),
+          as(user).post(`/categories/${category.id}/archive`),
+        ]);
+
+        expect(archive.status).toBe(200);
+        expect([200, 409]).toContain(edit.status);
+        const stored = await prisma.category.findUniqueOrThrow({ where: { id: category.id } });
+        expect(stored.archivedAt).not.toBeNull();
+        expect(stored.name).toBe(edit.status === 200 ? 'After' : 'Before');
+      }
+    });
+
+    it('ends archive-versus-restore in a consistent state', async () => {
+      for (let round = 0; round < ROUNDS; round++) {
+        const user = await newUser();
+        const category = await createCategory(user);
+        await as(user).post(`/categories/${category.id}/archive`).expect(200);
+
+        const [restore, archive] = await Promise.all([
+          as(user).post(`/categories/${category.id}/restore`),
+          as(user).post(`/categories/${category.id}/archive`),
+        ]);
+
+        expect([restore.status, archive.status]).toEqual([200, 200]);
+        const stored = await prisma.category.findUniqueOrThrow({ where: { id: category.id } });
+        const last = [restore, archive].find(
+          (res) => (res.body.archivedAt === null) === (stored.archivedAt === null),
+        );
+        expect(last).toBeDefined();
+      }
+    });
+  });
+
+  describe('two users', () => {
+    it('keeps each user to their own categories while both see the system ones', async () => {
+      const [anna, ben] = [await newUser(), await newUser()];
+      const annas = await createCategory(anna, { name: 'Pets', parentId: FOOD });
+      const bens = await createCategory(ben, { name: 'Pets', parentId: FOOD });
+
+      const annaList = ids(await as(anna).get('/categories').expect(200));
+      const benList = ids(await as(ben).get('/categories').expect(200));
+
+      expect(annaList.slice(0, SYSTEM_COUNT.all)).toEqual(benList.slice(0, SYSTEM_COUNT.all));
+      expect(annaList.slice(SYSTEM_COUNT.all)).toEqual([annas.id]);
+      expect(benList.slice(SYSTEM_COUNT.all)).toEqual([bens.id]);
+      for (const [method, path] of [
+        ['get', `/categories/${bens.id}`],
+        ['patch', `/categories/${bens.id}`],
+        ['post', `/categories/${bens.id}/archive`],
+        ['post', `/categories/${bens.id}/restore`],
+      ] as const) {
+        const res =
+          method === 'patch'
+            ? await as(anna).patch(path, { name: 'x' })
+            : await as(anna)[method](path);
+        expect(res.status).toBe(404);
+      }
+      await as(anna)
+        .post('/categories', validCategory({ parentId: bens.id }))
+        .expect(400);
+    });
+  });
+
   describe('authentication', () => {
     it.each([
       ['GET', '/categories'],
       ['GET', `/categories/${FOOD}`],
       ['POST', '/categories'],
       ['PATCH', `/categories/${FOOD}`],
+      ['POST', `/categories/${FOOD}/archive`],
+      ['POST', `/categories/${FOOD}/restore`],
     ])('rejects %s %s without an access token', async (method, path) => {
       const req =
         method === 'POST'

@@ -117,6 +117,72 @@ export class CategoriesService {
     }
   }
 
+  /**
+   * Archives the user's own category: kept for history, read-only, listed
+   * only on request. Idempotent. A top-level category with active
+   * subcategories is a 409. The category is locked FOR UPDATE before its
+   * subcategories are counted, and a request adding an active subcategory
+   * holds the parent FOR SHARE, so neither can miss the other.
+   *
+   * archived_at must not precede created_at (a CHECK), and the two can come
+   * from different clocks, so archived_at is the later of now and created_at.
+   */
+  async archive(userId: string, id: string): Promise<Category> {
+    return this.prisma.$transaction(async (tx) => {
+      const category = await lockCategory(tx, id, { ownedBy: userId, mode: 'FOR UPDATE' });
+      if (!category) return this.refuseUnowned(userId, id);
+      if (category.archived_at) return tx.category.findUniqueOrThrow({ where: { id } });
+      if (!category.parent_id) {
+        const active = await tx.category.count({ where: { parentId: id, archivedAt: null } });
+        if (active > 0) {
+          throw new ConflictException('The category has active subcategories. Archive them first.');
+        }
+      }
+      const now = new Date();
+      return tx.category.update({
+        where: { id },
+        data: { archivedAt: now > category.created_at ? now : category.created_at },
+      });
+    });
+  }
+
+  /**
+   * Makes the user's own archived category active again. Idempotent for an
+   * active one. 409 if an active sibling has its name, or if its parent is
+   * archived: the parent is locked FOR SHARE while that is checked.
+   */
+  async restore(userId: string, id: string): Promise<Category> {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const category = await lockCategory(tx, id, { ownedBy: userId, mode: 'FOR UPDATE' });
+        if (!category) return this.refuseUnowned(userId, id);
+        if (!category.archived_at) return tx.category.findUniqueOrThrow({ where: { id } });
+        if (category.parent_id) {
+          const parent = await lockCategory(tx, category.parent_id, {
+            visibleTo: userId,
+            mode: 'FOR SHARE',
+          });
+          if (parent?.archived_at) {
+            throw new ConflictException('The parent category is archived. Restore it first.');
+          }
+        }
+        return tx.category.update({ where: { id }, data: { archivedAt: null } });
+      });
+    } catch (error) {
+      throw nameConflictOr(error);
+    }
+  }
+
+  /**
+   * The answer for an id the locking query didn't find among the user's own:
+   * 403 for a system category, 404 otherwise. getOwn always throws here,
+   * since rows are never deleted and ownership never changes.
+   */
+  private async refuseUnowned(userId: string, id: string): Promise<never> {
+    await this.getOwn(userId, id);
+    throw categoryNotFound();
+  }
+
   /** The user's own category: 404 if not visible, 403 if it's a system category. */
   private async getOwn(userId: string, id: string): Promise<Category> {
     const category = await this.get(userId, id);
