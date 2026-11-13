@@ -685,6 +685,93 @@ describe('categories', () => {
   describe('concurrent requests', () => {
     const ROUNDS = 5;
 
+    /**
+     * Deterministic interleaving: another transaction runs `hold` and keeps
+     * its row locks while `send` starts. Once PostgreSQL reports a backend
+     * waiting on a lock (or the request has already finished, which is what
+     * happens when the code takes no lock), the holder commits. A request
+     * that locks correctly therefore always sees the holder's committed work.
+     */
+    async function whileLocked(
+      hold: (tx: Prisma.TransactionClient) => Promise<unknown>,
+      send: () => request.Test,
+    ): Promise<request.Response> {
+      let release!: () => void;
+      const released = new Promise<void>((resolve) => (release = resolve));
+      let holding!: () => void;
+      const held = new Promise<void>((resolve) => (holding = resolve));
+      const holder = prisma.$transaction(
+        async (tx) => {
+          await hold(tx);
+          holding();
+          await released;
+        },
+        { timeout: 20_000 },
+      );
+      await held;
+
+      let finished = false;
+      const response = send().then((res) => {
+        finished = true;
+        return res;
+      });
+      for (let attempt = 0; attempt < 400 && !finished; attempt++) {
+        const [row] = await prisma.$queryRaw<{ waiting: bigint }[]>`
+          SELECT count(*) AS waiting FROM pg_stat_activity
+          WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+        if (Number(row?.waiting) > 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      release();
+      await holder;
+      return response;
+    }
+
+    it('makes a subcategory create wait for an archive of its parent in progress', async () => {
+      const user = await newUser();
+      const parent = await createCategory(user);
+
+      const res = await whileLocked(
+        (tx) =>
+          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+        () => as(user).post('/categories', validCategory({ parentId: parent.id })),
+      );
+
+      expect(res.status).toBe(409);
+      expect(await orphans(user.id)).toBe(0);
+    });
+
+    it('makes an archive wait for a subcategory being created under it', async () => {
+      const user = await newUser();
+      const parent = await createCategory(user);
+
+      const res = await whileLocked(
+        (tx) => tx.$executeRaw`
+          INSERT INTO categories (user_id, parent_id, name, kind, nature)
+          VALUES (${user.id}::uuid, ${parent.id}::uuid, 'Child', 'expense', 'discretionary')`,
+        () => as(user).post(`/categories/${parent.id}/archive`),
+      );
+
+      expect(res.status).toBe(409);
+      expect(await orphans(user.id)).toBe(0);
+    });
+
+    it('makes a subcategory restore wait for an archive of its parent in progress', async () => {
+      const user = await newUser();
+      const parent = await createCategory(user);
+      const child = await createCategory(user, { parentId: parent.id });
+      await as(user).post(`/categories/${child.id}/archive`).expect(200);
+
+      const res = await whileLocked(
+        (tx) =>
+          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+        () => as(user).post(`/categories/${child.id}/restore`),
+      );
+
+      expect(res.status).toBe(409);
+      expect(await orphans(user.id)).toBe(0);
+    });
+
     it('never leaves a new subcategory under a parent archived at the same time', async () => {
       for (let round = 0; round < ROUNDS; round++) {
         const user = await newUser();
