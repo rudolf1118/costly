@@ -11,3 +11,9 @@ export {
   serializeMinorUnits,
   type SignDisplay,
 } from './money';
+export {
+  type FieldError,
+  type ProblemDetails,
+  readProblem,
+  type ResponseLike,
+} from './problem-details';

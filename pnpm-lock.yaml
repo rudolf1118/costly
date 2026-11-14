@@ -326,6 +326,10 @@ importers:
         version: 5.0.2(@types/node@24.13.6)(jsdom@30.1.1(@noble/hashes@1.8.0))(vite@8.3.1(@types/node@24.13.6)(jiti@2.7.0)(yaml@2.9.1))
 
   packages/shared:
+    dependencies:
+      zod:
+        specifier: ^4.6.5
+        version: 4.6.5
     devDependencies:
       fast-check:
         specifier: ^4.10.2

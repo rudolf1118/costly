@@ -39,3 +39,17 @@ Decided with the project owner on 2026-11-14, as ADR-0010 left open.
 - A minus (`-` or `−`) is accepted only when the field allows negative amounts, such as an
   account's opening balance.
 - Whatever `formatAmd` displays can be typed back in and reads as the same amount.
+
+## API errors
+
+`readProblem(response)` reads the error of any non-2xx response as RFC 9457 problem details
+(`api-conventions.md`, Errors) and never throws.
+
+- `status` is always the response's status, whatever the body says.
+- `errors` lists the invalid fields of a rejected body. An entry whose `path` is `""` belongs to
+  the whole body (for example an unknown field), not to one input.
+- `retryAfterSeconds` comes from `Retry-After` on a 429.
+- A body that isn't problem details (an empty body, a proxy's HTML page, malformed JSON) gives a
+  generic problem with the status and a title, so there is always something to show.
+- It takes a structural `ResponseLike` rather than the DOM `Response` type, so the package needs
+  no browser or Node type definitions.
