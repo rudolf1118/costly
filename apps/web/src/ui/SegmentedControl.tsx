@@ -10,9 +10,10 @@ export interface SegmentedOption<T extends string> {
 export interface SegmentedControlProps<T extends string> {
   /** Names the group for screen readers, such as "Period". */
   label: string;
-  options: readonly SegmentedOption<T>[];
+  /** `NoInfer` here and on `onValueChange`: the type comes from `value` alone. */
+  options: readonly SegmentedOption<NoInfer<T>>[];
   value: T;
-  onValueChange(value: T): void;
+  onValueChange(value: NoInfer<T>): void;
   className?: string;
 }
 
@@ -44,7 +45,7 @@ export function SegmentedControl<T extends string>({
         if (next) onValueChange(next as T);
       }}
       className={cn(
-        'relative inline-grid h-9 auto-cols-fr grid-flow-col rounded-md bg-subtle p-[3px]',
+        'relative inline-grid h-9 w-fit auto-cols-fr grid-flow-col rounded-md bg-subtle p-[3px]',
         className,
       )}
     >
