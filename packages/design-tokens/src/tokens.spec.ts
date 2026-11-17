@@ -1,15 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { contrastRatio } from './contrast.ts';
-import { tokensCss } from './css.ts';
+import { tailwindThemeCss, tokensCss } from './css.ts';
 import { type ThemeColors, type ThemeName, themes } from './tokens.ts';
 
-describe('tokens.css', () => {
-  it('is up to date with tokens.ts', () => {
-    const committed = readFileSync(new URL('../tokens.css', import.meta.url), 'utf8');
+describe('generated CSS', () => {
+  // Run `pnpm --filter @costly/design-tokens generate` after changing a token.
+  it.each([
+    ['tokens.css', tokensCss],
+    ['tailwind.css', tailwindThemeCss],
+  ])('%s is up to date with tokens.ts', (file, generate) => {
+    const committed = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8');
 
-    // Run `pnpm --filter @costly/design-tokens generate` after changing a token.
-    expect(committed).toBe(tokensCss());
+    expect(committed).toBe(generate());
+  });
+
+  it('gives Tailwind a utility for every colour token', () => {
+    for (const name of Object.keys(themes.light)) {
+      const kebab = name.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase());
+      expect(tailwindThemeCss()).toContain(`--color-${kebab}: var(--costly-color-${kebab});`);
+    }
   });
 
   it('declares the same colour names for both themes', () => {

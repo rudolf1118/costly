@@ -13,5 +13,5 @@ export {
   typeScale,
   type TypeStyle,
 } from './tokens.ts';
-export { colorVar, PREFIX, tokensCss } from './css.ts';
+export { colorVar, PREFIX, tailwindThemeCss, tokensCss } from './css.ts';
 export { contrastRatio } from './contrast.ts';

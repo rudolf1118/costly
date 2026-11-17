@@ -1,6 +1,9 @@
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { tokensCss } from './css.ts';
+import { tailwindThemeCss, tokensCss } from './css.ts';
 
-const target = fileURLToPath(new URL('../tokens.css', import.meta.url));
-writeFileSync(target, tokensCss());
+const write = (file: string, content: string) =>
+  writeFileSync(fileURLToPath(new URL(`../${file}`, import.meta.url)), content);
+
+write('tokens.css', tokensCss());
+write('tailwind.css', tailwindThemeCss());

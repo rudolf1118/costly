@@ -3,7 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
     <title>Costly</title>
+    <!--
+      Applies the saved theme before the first paint, so a dark page never
+      flashes light. Keep in sync with src/theme/theme.ts; theme-script.spec.ts
+      runs this script and checks it against that module.
+    -->
+    <script id="theme-script">
+      (function () {
+        var preference = null;
+        try {
+          preference = window.localStorage.getItem('costly.theme');
+        } catch (e) {}
+        var dark =
+          preference === 'dark' ||
+          (preference !== 'light' &&
+            typeof window.matchMedia === 'function' &&
+            window.matchMedia('(prefers-color-scheme: dark)').matches);
+        document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
