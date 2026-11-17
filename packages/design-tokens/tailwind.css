@@ -50,6 +50,9 @@
   --color-warning-soft: var(--costly-color-warning-soft);
   --color-warning-ink: var(--costly-color-warning-ink);
   --color-info: var(--costly-color-info);
+  --color-brand: var(--costly-color-brand);
+  --color-on-brand: var(--costly-color-on-brand);
+  --color-on-brand-secondary: var(--costly-color-on-brand-secondary);
   --color-inverse: var(--costly-color-inverse);
   --color-on-inverse: var(--costly-color-on-inverse);
   --color-on-inverse-secondary: var(--costly-color-on-inverse-secondary);

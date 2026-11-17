@@ -14,7 +14,7 @@ cannot drift.
 
 | Group | Tokens | CSS |
 |---|---|---|
-| Colour | Cobalt scale; 45 theme colours for light and dark | `--costly-color-<name>` |
+| Colour | Cobalt scale; 48 theme colours for light and dark | `--costly-color-<name>` |
 | Elevation | `e1` (menus), `e2` (dialogs); none in dark mode, which uses `raised` | `--costly-shadow-<name>` |
 | Type | Geist and Geist Mono; 9 text styles from the Type board | `--costly-font-*`, `--costly-text-<style>-{size,line-height,weight,tracking}` |
 | Radius | `xs` 4, `s` 6, `m` 10, `l` 14, `full` | `--costly-radius-<name>` |

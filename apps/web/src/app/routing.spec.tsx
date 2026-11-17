@@ -89,6 +89,11 @@ describe('routing', () => {
     // jsdom loads no CSS, so the sidebar and the bottom tab bar, each a
     // "Main" navigation, are both present; a browser displays only one at
     // any width. Landmark uniqueness is checked in the browser instead.
-    expect(await axeViolations(container, { skip: ['landmark-unique'] })).toEqual([]);
+    expect(
+      await axeViolations(container.ownerDocument.body, {
+        page: true,
+        skip: ['landmark-unique'],
+      }),
+    ).toEqual([]);
   });
 });

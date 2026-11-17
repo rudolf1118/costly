@@ -102,6 +102,9 @@
   --costly-color-warning-soft: #fdf3e2;
   --costly-color-warning-ink: #6e4100;
   --costly-color-info: #1f6391;
+  --costly-color-brand: #13234f;
+  --costly-color-on-brand: #ffffff;
+  --costly-color-on-brand-secondary: #c3d0f1;
   --costly-color-inverse: #17191d;
   --costly-color-on-inverse: #ffffff;
   --costly-color-on-inverse-secondary: #c9ced6;
@@ -149,6 +152,9 @@
   --costly-color-warning-soft: #33270f;
   --costly-color-warning-ink: #e8c27a;
   --costly-color-info: #7fb5de;
+  --costly-color-brand: #13234f;
+  --costly-color-on-brand: #ffffff;
+  --costly-color-on-brand-secondary: #c3d0f1;
   --costly-color-inverse: #eceef1;
   --costly-color-on-inverse: #17191d;
   --costly-color-on-inverse-secondary: #3e4450;
@@ -197,6 +203,9 @@
     --costly-color-warning-soft: #33270f;
     --costly-color-warning-ink: #e8c27a;
     --costly-color-info: #7fb5de;
+    --costly-color-brand: #13234f;
+    --costly-color-on-brand: #ffffff;
+    --costly-color-on-brand-secondary: #c3d0f1;
     --costly-color-inverse: #eceef1;
     --costly-color-on-inverse: #17191d;
     --costly-color-on-inverse-secondary: #3e4450;

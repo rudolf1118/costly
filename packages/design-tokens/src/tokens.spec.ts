@@ -53,6 +53,8 @@ const TEXT: [Key, Key[]][] = [
   ['warning', ['surface']],
   ['warningInk', ['warningSoft']],
   ['info', ['surface']],
+  ['onBrand', ['brand']],
+  ['onBrandSecondary', ['brand']],
   ['onInverse', ['inverse']],
   ['onInverseSecondary', ['inverse']],
 ];
