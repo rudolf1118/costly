@@ -3,6 +3,9 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
+    // For the types of fetch, Request and Response only: the same API exists
+    // in browsers, Node and React Native.
+    "lib": ["ES2023", "DOM"],
     "declaration": false,
     "noEmit": true,
     "types": []
