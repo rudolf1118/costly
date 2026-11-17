@@ -29,6 +29,7 @@ docs/
 
   02-requirements/
     ledger-accounts.md             financial accounts: fields, money, lifecycle, balance semantics
+    ledger-categories.md           categories: system vs. custom, two levels, nature, lifecycle, seeding
     functional-requirements.md     numbered FR-xx per module (referenced from tests and the thesis)
     non-functional-requirements.md latency targets, correctness invariants, data isolation, local-run requirement
     glossary.md                    baseline, data tier, discretionary, insight, fingerprint, EOM…
@@ -50,6 +51,7 @@ docs/
       0007-transfers-as-paired-rows.md            (planned)
       0008-dirty-marking-instead-of-outbox.md     (planned)
       0009-sync-simulation-async-snapshots.md     (planned)
+      0010-web-client-architecture.md
       0011-native-mobile-clients.md               (proposed)
       ...                          one ADR per significant decision, including rejected options
 
@@ -57,7 +59,7 @@ docs/
     schema-overview.md             ER diagram per domain (core, analytics, forecasting, insights)
     tables/                        one short file per domain: purpose, fields, constraints, indexes
       identity.md                  users, refresh_tokens (Chapter 1)
-      ledger.md                    accounts (Chapter 1)
+      ledger.md                    accounts, categories (Chapter 1)
     derived-data-policy.md         what is stored vs. calculated, and why
     migrations.md                  how migrations are created, applied and tested
     migrations-log.md              notable migrations and data backfills

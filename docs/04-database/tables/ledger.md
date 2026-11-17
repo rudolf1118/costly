@@ -54,3 +54,58 @@ Transactions (task 6) will reference `accounts.id`. A balance at the end of day 
 
 - `apps/api/test/accounts.schema.spec.ts` checks every constraint by SQLSTATE and name, against a fresh container.
 - `apps/api/test/accounts.e2e.spec.ts` covers the API: lifecycle, money, validation, two-user ownership, transport edge cases, clock skew in both directions, and concurrent creates, renames, archives and restores against real PostgreSQL.
+
+## `categories`
+
+What transactions are classified by, two levels at most. Introduced by migration `20261113151531_add_categories` and filled with the system categories by `20261113151532_seed_system_categories` (Chapter 1, task 6). The behaviour is in [`02-requirements/ledger-categories.md`](../../02-requirements/ledger-categories.md).
+
+### Columns
+
+| Column | Type | Null | Default | Notes |
+|---|---|---|---|---|
+| `id` | `uuid` | no | `uuidv7()` | System categories have fixed ids (see Seeding). |
+| `user_id` | `uuid` | yes | — | `NULL` for a system category. References `users.id`, `ON DELETE RESTRICT`. |
+| `parent_id` | `uuid` | yes | — | `NULL` at the top level. References `categories.id`, `ON DELETE RESTRICT`. |
+| `name` | `text` | no | — | |
+| `kind` | `category_kind` enum | no | — | `income`, `expense` |
+| `nature` | `category_nature` enum | yes | — | `essential_fixed`, `essential_variable`, `discretionary`; `NULL` exactly for income. |
+| `archived_at` | `timestamptz(3)` | yes | — | `NULL` means active. |
+| `created_at` | `timestamptz(3)` | no | `CURRENT_TIMESTAMP` | |
+| `updated_at` | `timestamptz(3)` | no | `CURRENT_TIMESTAMP` | Also set by Prisma's `@updatedAt`. |
+
+### Constraints and indexes
+
+| Name | Rule | Why |
+|---|---|---|
+| `categories_name_check`, `categories_name_nfc_check` | the account name rules | Shared with accounts; the API normalizes and validates first. |
+| `categories_nature_check` | `(kind = 'expense') = (nature IS NOT NULL)` | Every expense has a nature; income never does. |
+| `categories_not_own_parent_check` | `parent_id <> id` | |
+| `categories_archived_after_creation_check` | `archived_at IS NULL OR archived_at >= created_at` | As for accounts, archive stores the later of now and `created_at`. |
+| `categories_active_name_key` | unique `(user_id, parent_id, kind, lower(name)) NULLS NOT DISTINCT` where `archived_at IS NULL` | One active name per owner, parent and kind. `NULLS NOT DISTINCT` makes the system one owner and the top level one parent. |
+| `categories_user_id_id_idx` | `(user_id, id)` | A user's categories in creation order. |
+| `categories_parent_id_idx` | `(parent_id)` | Subcategories of a category, checked before archiving it. |
+
+### Trigger `categories_parent_rules`
+
+`BEFORE INSERT OR UPDATE OF user_id, parent_id, kind`. It enforces the rules that span two rows, which a `CHECK` can't express. Each violation is a `check_violation` (SQLSTATE 23514):
+
+| Constraint name | Rule |
+|---|---|
+| `categories_depth_check` | The parent is a top-level category. |
+| `categories_parent_kind_check` | A subcategory has its parent's kind. |
+| `categories_parent_owner_check` | The parent is a system category or has the same owner. A system subcategory has a system parent. |
+| `categories_immutable_check` | `user_id`, `parent_id` and `kind` never change. |
+
+Immutability is what keeps the other three true after insert, and why the trigger only has to look at the parent on `INSERT`. Whether the parent is **active** is an application rule, because it needs row locks: a request that adds an active child locks the parent `FOR SHARE`, and archiving locks it `FOR UPDATE` before counting active children.
+
+### Seeding
+
+The seed migration inserts the 36 system categories listed in the requirements document. Their ids are `00000000-0000-7000-8000-0000000000NN`, numbered in seed order with parents before their subcategories:
+- **Order:** they are UUIDv7-shaped with a zero timestamp, so `ORDER BY id` lists them before every user's categories.
+- **Runs once:** Prisma records the migration and never runs it twice; the schema test deploys again to prove it.
+- **Changes:** a later change to the set is a new migration.
+
+### Tests
+
+- `apps/api/test/categories.schema.spec.ts` checks the seed, every constraint and every trigger rule by SQLSTATE and message, against a fresh container.
+- `apps/api/test/categories.e2e.spec.ts` covers the API.

@@ -52,6 +52,8 @@ The API integration tests start a throwaway PostgreSQL container and run
 | `20261106121230_add_refresh_tokens` | `refresh_tokens` table | [`tables/identity.md`](tables/identity.md#refresh_tokens) |
 | `20261110064015_add_accounts` | `account_type` enum, `accounts` table | [`tables/ledger.md`](tables/ledger.md) |
 | `20261110190000_require_nfc_account_names` | `accounts_name_nfc_check` | [`tables/ledger.md`](tables/ledger.md#constraints-and-indexes) |
+| `20261113151531_add_categories` | `category_kind` and `category_nature` enums, `categories` table, parent-rules trigger | [`tables/ledger.md`](tables/ledger.md#categories) |
+| `20261113151532_seed_system_categories` | the 36 system categories | [`tables/ledger.md`](tables/ledger.md#seeding) |
 
 An existing local database needs `pnpm db:deploy`, or `pnpm db:migrate` while developing, before
 the API sees new tables.
