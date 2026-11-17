@@ -10,6 +10,7 @@ import {
 import { useEffect } from 'react';
 import { AuthLayout } from '../auth/AuthLayout';
 import type { SessionStore } from '../auth/session';
+import { AccountsPage } from '../features/accounts/AccountsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { OverviewPage } from '../pages/OverviewPage';
@@ -102,6 +103,16 @@ const overviewRoute = createRoute({
   staticData: { title: 'Overview' },
 });
 
+const accountsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/accounts',
+  component: AccountsPage,
+  // Active is the default view, so only the archived one appears in the address.
+  validateSearch: (search: Record<string, unknown>): { view?: 'archived' } =>
+    search.view === 'archived' ? { view: 'archived' } : {},
+  staticData: { title: 'Accounts' },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -126,7 +137,7 @@ const registerRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  appRoute.addChildren([overviewRoute, settingsRoute]),
+  appRoute.addChildren([overviewRoute, accountsRoute, settingsRoute]),
   authRoute.addChildren([loginRoute, registerRoute]),
 ]);
 

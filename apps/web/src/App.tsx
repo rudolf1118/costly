@@ -1,3 +1,4 @@
+import { ApiError } from '@costly/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, type RouterHistory } from '@tanstack/react-router';
 import { useEffect, useState, useSyncExternalStore } from 'react';
@@ -18,7 +19,7 @@ export interface AppProps {
 export function App({ apiBaseUrl, session: injected, history }: AppProps) {
   // One of each for the app's lifetime.
   const [session] = useState(() => injected ?? new SessionStore({ baseUrl: apiBaseUrl }));
-  const [queryClient] = useState(() => new QueryClient());
+  const [queryClient] = useState(createQueryClient);
   const [router] = useState(() => createAppRouter({ apiBaseUrl, session }, history));
   const state = useSyncExternalStore(session.subscribe, session.getSnapshot);
 
@@ -48,6 +49,23 @@ export function App({ apiBaseUrl, session: injected, history }: AppProps) {
       </QueryClientProvider>
     </SessionProvider>
   );
+}
+
+/**
+ * A failed read is retried once, and only when retrying can help: the network
+ * dropped or the API was briefly unavailable. A 4xx answer won't change.
+ */
+function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: (failures, error) =>
+          failures < 1 &&
+          error instanceof ApiError &&
+          (error.kind === 'network' || error.status >= 500),
+      },
+    },
+  });
 }
 
 /** Shown while the session is restored on start; usually a fraction of a second. */
