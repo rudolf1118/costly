@@ -751,7 +751,7 @@ describe('categories', () => {
 
       const res = await whileLocked(
         (tx) =>
-          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+          tx.$executeRaw`UPDATE categories SET archived_at = GREATEST(now(), created_at) WHERE id = ${parent.id}::uuid`,
         () => as(user).post('/categories', validCategory({ parentId: parent.id })),
       );
 
@@ -782,7 +782,7 @@ describe('categories', () => {
 
       const res = await whileLocked(
         (tx) =>
-          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+          tx.$executeRaw`UPDATE categories SET archived_at = GREATEST(now(), created_at) WHERE id = ${parent.id}::uuid`,
         () => as(user).post(`/categories/${child.id}/restore`),
       );
 
