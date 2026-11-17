@@ -69,6 +69,9 @@ Notes worth keeping for the thesis:
     concurrent refusals deadlocked the pool: they and every other request answered 500 until
     connections timed out. Fixed by querying through the transaction; a burst test pins it.
   - Income categories rejected the `"nature": null` that responses carry, so a round-trip failed.
+  - The two-clock lesson a third time: the lock tests archived with the database's `now()` and
+    failed whenever Docker's clock lagged the API's. Any raw `archived_at` write must use
+    `GREATEST(now(), created_at)`.
 
 Next in Chapter 1: merchants, transactions and transfers (the ledger), recurring
 rules, the first dashboard and seeded demo data, released as `v0.1.0`.
