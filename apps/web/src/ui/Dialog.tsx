@@ -16,6 +16,8 @@ export interface DialogContentProps {
    * for add and edit forms. Below 768 px both become a sheet at the bottom.
    */
   variant?: 'modal' | 'drawer';
+  /** The edge a drawer slides in from. Forms use the right; the navigation menu the left. */
+  side?: 'right' | 'left';
   children?: ReactNode;
   className?: string;
 }
@@ -29,6 +31,7 @@ export function DialogContent({
   title,
   description,
   variant = 'modal',
+  side = 'right',
   children,
   className,
 }: DialogContentProps) {
@@ -53,9 +56,10 @@ export function DialogContent({
             'sm:-translate-x-1/2 sm:rounded-lg sm:border sm:p-6',
           ],
           variant === 'drawer' && [
-            'sm:inset-y-0 sm:right-0 sm:left-auto sm:max-h-none sm:w-[min(27.5rem,100%)]',
-            'sm:rounded-none sm:border-t-0 sm:border-l sm:p-6',
-            'sm:data-[state=open]:animate-drawer-in sm:data-[state=closed]:animate-drawer-out',
+            'sm:inset-y-0 sm:max-h-none sm:w-[min(27.5rem,100%)] sm:rounded-none sm:border-t-0 sm:p-6',
+            side === 'right'
+              ? 'sm:right-0 sm:left-auto sm:border-l sm:data-[state=open]:animate-drawer-in sm:data-[state=closed]:animate-drawer-out'
+              : 'sm:right-auto sm:left-0 sm:border-r sm:data-[state=open]:animate-drawer-in-left sm:data-[state=closed]:animate-drawer-out-left',
           ],
           className,
         )}

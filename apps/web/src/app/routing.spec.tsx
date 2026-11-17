@@ -86,6 +86,9 @@ describe('routing', () => {
   it.each(['/', '/settings', '/missing'])('has no accessibility violations at %s', async (path) => {
     const { container } = await renderApp(path);
 
-    expect(await axeViolations(container)).toEqual([]);
+    // jsdom loads no CSS, so the sidebar and the bottom tab bar, each a
+    // "Main" navigation, are both present; a browser displays only one at
+    // any width. Landmark uniqueness is checked in the browser instead.
+    expect(await axeViolations(container, { skip: ['landmark-unique'] })).toEqual([]);
   });
 });

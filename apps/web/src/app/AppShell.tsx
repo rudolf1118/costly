@@ -1,7 +1,7 @@
-import { Link, Outlet, useMatches, useRouterState } from '@tanstack/react-router';
+import { Outlet, useMatches, useRouterState } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
-import { Logo } from '../ui/Logo';
-import { allNav } from './navigation';
+import { TooltipProvider } from '../ui/Tooltip';
+import { BottomTabs, Sidebar, TopBar } from './NavMenus';
 
 /**
  * The frame around every page: a skip link, the navigation and the page in
@@ -13,34 +13,24 @@ export function AppShell() {
   const mainRef = useFocusOnNavigation();
 
   return (
-    <div className="min-h-dvh bg-page text-text">
-      <SkipLink />
-      <header className="flex items-center gap-6 border-b border-border bg-surface px-4 py-3">
-        <Logo />
-        <nav aria-label="Main">
-          <ul className="flex gap-1">
-            {allNav.map((item) => (
-              <li key={item.to}>
-                <Link
-                  to={item.to}
-                  className="rounded-sm px-3 py-2 text-body font-medium text-text-secondary hover:bg-subtle aria-[current=page]:text-accent-text"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </header>
-      <main
-        id="main"
-        ref={mainRef}
-        tabIndex={-1}
-        className="mx-auto w-full max-w-[85rem] px-4 py-6 outline-none sm:px-6 lg:px-10 lg:py-9"
-      >
-        <Outlet />
-      </main>
-    </div>
+    <TooltipProvider delayDuration={300}>
+      <div className="min-h-dvh bg-page text-text">
+        <SkipLink />
+        <Sidebar />
+        <TopBar />
+        <main
+          id="main"
+          ref={mainRef}
+          tabIndex={-1}
+          className="pb-[calc(4rem+env(safe-area-inset-bottom))] outline-none sm:pb-0 md:pl-16 lg:pl-58"
+        >
+          <div className="mx-auto w-full max-w-[85rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+            <Outlet />
+          </div>
+        </main>
+        <BottomTabs />
+      </div>
+    </TooltipProvider>
   );
 }
 
