@@ -1,5 +1,6 @@
 import { Outlet, useMatches, useRouterState } from '@tanstack/react-router';
 import { useEffect, useRef } from 'react';
+import { ToastProvider } from '../ui/Toast';
 import { TooltipProvider } from '../ui/Tooltip';
 import { BottomTabs, Sidebar, TopBar } from './NavMenus';
 
@@ -14,22 +15,24 @@ export function AppShell() {
 
   return (
     <TooltipProvider delayDuration={300}>
-      <div className="min-h-dvh bg-page text-text">
-        <SkipLink />
-        <Sidebar />
-        <TopBar />
-        <main
-          id="main"
-          ref={mainRef}
-          tabIndex={-1}
-          className="pb-[calc(4rem+env(safe-area-inset-bottom))] outline-none sm:pb-0 md:pl-16 lg:pl-58"
-        >
-          <div className="mx-auto w-full max-w-[85rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
-            <Outlet />
-          </div>
-        </main>
-        <BottomTabs />
-      </div>
+      <ToastProvider>
+        <div className="min-h-dvh bg-page text-text">
+          <SkipLink />
+          <Sidebar />
+          <TopBar />
+          <main
+            id="main"
+            ref={mainRef}
+            tabIndex={-1}
+            className="pb-[calc(4rem+env(safe-area-inset-bottom))] outline-none sm:pb-0 md:pl-16 lg:pl-58"
+          >
+            <div className="mx-auto w-full max-w-[85rem] px-4 py-6 sm:px-6 lg:px-10 lg:py-9">
+              <Outlet />
+            </div>
+          </main>
+          <BottomTabs />
+        </div>
+      </ToastProvider>
     </TooltipProvider>
   );
 }
