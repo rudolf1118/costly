@@ -8,6 +8,7 @@ import { Dialog, DialogClose, DialogContent, DialogTrigger } from '../ui/Dialog'
 import { SegmentedControl } from '../ui/SegmentedControl';
 import { Skeleton } from '../ui/Skeleton';
 import { TextField } from '../ui/TextField';
+import { useToast } from '../ui/Toast';
 
 /** Written out in full: Tailwind only generates classes it can find as literal text. */
 const TYPE_CLASSES: Record<keyof typeof typeScale, string> = {
@@ -29,6 +30,7 @@ const TYPE_CLASSES: Record<keyof typeof typeScale, string> = {
  */
 export function UiPreview() {
   const { preference, setPreference } = useTheme();
+  const toast = useToast();
   const [period, setPeriod] = useState<'1w' | '1m' | '3m' | '1y'>('1m');
 
   return (
@@ -144,6 +146,26 @@ export function UiPreview() {
               </DialogContent>
             </Dialog>
           ))}
+        </div>
+      </Section>
+
+      <Section title="Toasts">
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" onClick={() => toast({ title: 'Changes saved' })}>
+            Show toast
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() =>
+              toast({
+                title: 'Account archived',
+                description: 'Sample account',
+                action: { label: 'Undo', onAction: () => toast({ title: 'Account restored' }) },
+              })
+            }
+          >
+            Show toast with Undo
+          </Button>
         </div>
       </Section>
 

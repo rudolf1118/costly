@@ -17,6 +17,13 @@
   --animate-drawer-in: drawer-in var(--costly-motion-nav-duration) var(--costly-motion-nav-easing);
   --animate-drawer-out: drawer-in var(--costly-motion-exit-duration)
     var(--costly-motion-exit-easing) reverse;
+  --animate-drawer-in-left: drawer-in-left var(--costly-motion-nav-duration)
+    var(--costly-motion-nav-easing);
+  --animate-drawer-out-left: drawer-in-left var(--costly-motion-exit-duration)
+    var(--costly-motion-exit-easing) reverse;
+  --animate-toast-in: toast-in var(--costly-motion-panel-duration) var(--costly-motion-panel-easing);
+  --animate-toast-out: overlay-in var(--costly-motion-exit-duration)
+    var(--costly-motion-exit-easing) reverse;
 
   @keyframes spin {
     to {
@@ -42,6 +49,17 @@
   @keyframes drawer-in {
     from {
       transform: translateX(100%);
+    }
+  }
+  @keyframes drawer-in-left {
+    from {
+      transform: translateX(-100%);
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
     }
   }
 }

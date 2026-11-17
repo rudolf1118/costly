@@ -1,10 +1,9 @@
-import { HealthStatus } from './health/HealthStatus';
+import { RouterProvider } from '@tanstack/react-router';
+import { useState } from 'react';
+import { createAppRouter } from './app/router';
 
 export function App({ apiBaseUrl }: { apiBaseUrl: string }) {
-  return (
-    <main>
-      <h1>Costly</h1>
-      <HealthStatus apiBaseUrl={apiBaseUrl} />
-    </main>
-  );
+  // One router for the app's lifetime.
+  const [router] = useState(() => createAppRouter({ apiBaseUrl }));
+  return <RouterProvider router={router} />;
 }
