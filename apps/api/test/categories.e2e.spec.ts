@@ -282,6 +282,21 @@ describe('categories', () => {
       expect(category).toMatchObject({ kind: 'income', nature: null, parentId: null });
     });
 
+    // Responses carry "nature": null for income, so a client may send it back.
+    it('accepts an explicit null nature for income and rejects it for expense', async () => {
+      const user = await newUser();
+
+      const income = await createCategory(user, { kind: 'income', nature: null });
+      const res = await as(user)
+        .post('/categories', validCategory({ nature: null }))
+        .expect(400);
+
+      expect(income.nature).toBeNull();
+      expect(res.body.errors).toEqual([
+        { path: 'nature', message: 'Required for expense categories' },
+      ]);
+    });
+
     it("creates a subcategory under a system category and under the user's own", async () => {
       const user = await newUser();
       const own = await createCategory(user);
@@ -736,7 +751,7 @@ describe('categories', () => {
 
       const res = await whileLocked(
         (tx) =>
-          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+          tx.$executeRaw`UPDATE categories SET archived_at = GREATEST(now(), created_at) WHERE id = ${parent.id}::uuid`,
         () => as(user).post('/categories', validCategory({ parentId: parent.id })),
       );
 
@@ -767,7 +782,7 @@ describe('categories', () => {
 
       const res = await whileLocked(
         (tx) =>
-          tx.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${parent.id}::uuid`,
+          tx.$executeRaw`UPDATE categories SET archived_at = GREATEST(now(), created_at) WHERE id = ${parent.id}::uuid`,
         () => as(user).post(`/categories/${child.id}/restore`),
       );
 
@@ -866,6 +881,26 @@ describe('categories', () => {
         expect(sorted(responses)).toEqual([200, 409]);
       }
     });
+
+    // The connection pool is small (PrismaService: max 5). A refusal must not
+    // need a second connection while its transaction holds the first, or a
+    // burst of refusals deadlocks the pool until connections time out.
+    it.each(['archive', 'restore'])(
+      'answers a burst of %s requests on categories the user may not change without exhausting the pool',
+      async (action) => {
+        const [user, other] = [await newUser(), await newUser()];
+        const foreign = await storedCategory(other);
+        const targets = [FOOD, foreign.id];
+
+        const responses = await Promise.all(
+          Array.from({ length: 12 }, (_, i) =>
+            as(user).post(`/categories/${targets[i % 2]}/${action}`),
+          ),
+        );
+
+        expect(sorted(responses)).toEqual([...Array(6).fill(403), ...Array(6).fill(404)]);
+      },
+    );
 
     it('archives once when archive is requested concurrently', async () => {
       const user = await newUser();

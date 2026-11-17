@@ -63,6 +63,15 @@ Notes worth keeping for the thesis:
       reports the request waiting, so each removed lock fails every run.
   - A test fixture set `archived_at` before Prisma set `created_at` and failed intermittently,
     the same two-clock lesson as task 5.
+- **Task 6 audit:**
+  - Refusing to archive or restore a system or foreign category queried outside the transaction,
+    holding one pooled connection while waiting for another. With five connections, twelve
+    concurrent refusals deadlocked the pool: they and every other request answered 500 until
+    connections timed out. Fixed by querying through the transaction; a burst test pins it.
+  - Income categories rejected the `"nature": null` that responses carry, so a round-trip failed.
+  - The two-clock lesson a third time: the lock tests archived with the database's `now()` and
+    failed whenever Docker's clock lagged the API's. Any raw `archived_at` write must use
+    `GREATEST(now(), created_at)`.
 
 Next in Chapter 1: merchants, transactions and transfers (the ledger), recurring
 rules, the first dashboard and seeded demo data, released as `v0.1.0`.

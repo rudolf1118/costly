@@ -224,7 +224,8 @@ describe('categories table', () => {
     it('frees the name of an archived category', async () => {
       const userId = await newUser();
       const id = await insert({ userId, name: 'Pets' });
-      await prisma.category.update({ where: { id }, data: { archivedAt: new Date() } });
+      // Same clock as the raw insert's created_at, so the archive CHECK holds.
+      await prisma.$executeRaw`UPDATE categories SET archived_at = now() WHERE id = ${id}::uuid`;
 
       await insert({ userId, name: 'Pets' });
     });
