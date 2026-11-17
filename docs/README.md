@@ -52,6 +52,7 @@ docs/
       0008-dirty-marking-instead-of-outbox.md     (planned)
       0009-sync-simulation-async-snapshots.md     (planned)
       0010-web-client-architecture.md
+      0011-native-mobile-clients.md               (proposed)
       ...                          one ADR per significant decision, including rejected options
 
   04-database/
