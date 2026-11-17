@@ -73,3 +73,14 @@ Decided with the project owner on 2026-11-14, as ADR-0010 left open.
   token in its HttpOnly cookie, a native client would keep it in secure storage (ADR-0011).
   `refresh()` resolves to `null` when the session has ended and rejects for anything else, such as
   the network being down, so an outage never signs the user out.
+
+## Accounts
+
+`accounts.ts` holds the account schemas and request bodies from
+`docs/02-requirements/ledger-accounts.md`.
+
+- `accountSchema` reads `openingBalance` as a `bigint`. It is the balance at the start of the
+  opening date, never a current balance, and clients label it that way.
+- `DEFAULT_LIQUIDITY` matches the API's default for each type, so a form can preset the switch.
+- `checkDisplayName` applies the API's name rule (NFC, trimmed, 1–64 code points, no control
+  characters) before sending. Category names follow the same rule.
