@@ -31,6 +31,7 @@ model User {
 
   refreshTokens RefreshToken[]
   accounts      Account[]
+  categories    Category[]
 
   @@map("users")
 }
@@ -94,4 +95,50 @@ model Account {
 
   @@index([userId, id])
   @@map("accounts")
+}
+
+// ledger: what a transaction is classified by
+// (docs/02-requirements/ledger-categories.md).
+enum CategoryKind {
+  income
+  expense
+
+  @@map("category_kind")
+}
+
+/// Drives fixed-vs-discretionary analytics and which spend recommendations may cut.
+enum CategoryNature {
+  essential_fixed
+  essential_variable
+  discretionary
+
+  @@map("category_nature")
+}
+
+// ledger: a category, two levels at most. user_id NULL marks a system category,
+// shared by every user and seeded by a migration. The name, nature and archive
+// CHECKs, the unique active-name index and the trigger that enforces the parent
+// rules (depth, kind, owner, immutability) live in the migration SQL; see
+// docs/04-database/tables/ledger.md.
+model Category {
+  id         String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  /// NULL for a system category.
+  userId     String?         @map("user_id") @db.Uuid
+  /// NULL for a top-level category; otherwise a top-level category of the same kind.
+  parentId   String?         @map("parent_id") @db.Uuid
+  name       String
+  kind       CategoryKind
+  /// Required for expense categories, NULL for income.
+  nature     CategoryNature?
+  archivedAt DateTime?       @map("archived_at") @db.Timestamptz(3)
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User?      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  parent   Category?  @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children Category[] @relation("CategoryChildren")
+
+  @@index([userId, id])
+  @@index([parentId])
+  @@map("categories")
 }
