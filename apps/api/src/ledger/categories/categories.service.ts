@@ -52,12 +52,8 @@ export class CategoriesService {
   }
 
   /** A system category or the user's own, else 404. */
-  async get(userId: string, id: string): Promise<Category> {
-    const category = await this.prisma.category.findFirst({
-      where: { id, OR: [{ userId: null }, { userId }] },
-    });
-    if (!category) throw categoryNotFound();
-    return category;
+  get(userId: string, id: string): Promise<Category> {
+    return findVisible(this.prisma, userId, id);
   }
 
   /**
@@ -130,7 +126,7 @@ export class CategoriesService {
   async archive(userId: string, id: string): Promise<Category> {
     return this.prisma.$transaction(async (tx) => {
       const category = await lockCategory(tx, id, { ownedBy: userId, mode: 'FOR UPDATE' });
-      if (!category) return this.refuseUnowned(userId, id);
+      if (!category) return refuseUnowned(tx, userId, id);
       if (category.archived_at) return tx.category.findUniqueOrThrow({ where: { id } });
       if (!category.parent_id) {
         const active = await tx.category.count({ where: { parentId: id, archivedAt: null } });
@@ -155,7 +151,7 @@ export class CategoriesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const category = await lockCategory(tx, id, { ownedBy: userId, mode: 'FOR UPDATE' });
-        if (!category) return this.refuseUnowned(userId, id);
+        if (!category) return refuseUnowned(tx, userId, id);
         if (!category.archived_at) return tx.category.findUniqueOrThrow({ where: { id } });
         if (category.parent_id) {
           const parent = await lockCategory(tx, category.parent_id, {
@@ -173,22 +169,45 @@ export class CategoriesService {
     }
   }
 
-  /**
-   * The answer for an id the locking query didn't find among the user's own:
-   * 403 for a system category, 404 otherwise. getOwn always throws here,
-   * since rows are never deleted and ownership never changes.
-   */
-  private async refuseUnowned(userId: string, id: string): Promise<never> {
-    await this.getOwn(userId, id);
-    throw categoryNotFound();
-  }
-
   /** The user's own category: 404 if not visible, 403 if it's a system category. */
   private async getOwn(userId: string, id: string): Promise<Category> {
     const category = await this.get(userId, id);
     if (category.userId === null) throw systemCategoryForbidden();
     return category;
   }
+}
+
+/**
+ * A system category or the user's own, else 404. Takes the client to query
+ * with, so code inside a transaction stays on the transaction's connection:
+ * waiting for a second connection while holding the first can exhaust the
+ * small pool when many requests do it at once.
+ */
+async function findVisible(
+  db: Prisma.TransactionClient,
+  userId: string,
+  id: string,
+): Promise<Category> {
+  const category = await db.category.findFirst({
+    where: { id, OR: [{ userId: null }, { userId }] },
+  });
+  if (!category) throw categoryNotFound();
+  return category;
+}
+
+/**
+ * The answer, inside a transaction, for an id the locking query didn't find
+ * among the user's own: 403 for a system category, 404 otherwise. Rows are
+ * never deleted and ownership never changes, so it always throws.
+ */
+async function refuseUnowned(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  id: string,
+): Promise<never> {
+  const category = await findVisible(tx, userId, id);
+  if (category.userId === null) throw systemCategoryForbidden();
+  throw categoryNotFound();
 }
 
 /**

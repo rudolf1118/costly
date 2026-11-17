@@ -867,6 +867,26 @@ describe('categories', () => {
       }
     });
 
+    // The connection pool is small (PrismaService: max 5). A refusal must not
+    // need a second connection while its transaction holds the first, or a
+    // burst of refusals deadlocks the pool until connections time out.
+    it.each(['archive', 'restore'])(
+      'answers a burst of %s requests on categories the user may not change without exhausting the pool',
+      async (action) => {
+        const [user, other] = [await newUser(), await newUser()];
+        const foreign = await storedCategory(other);
+        const targets = [FOOD, foreign.id];
+
+        const responses = await Promise.all(
+          Array.from({ length: 12 }, (_, i) =>
+            as(user).post(`/categories/${targets[i % 2]}/${action}`),
+          ),
+        );
+
+        expect(sorted(responses)).toEqual([...Array(6).fill(403), ...Array(6).fill(404)]);
+      },
+    );
+
     it('archives once when archive is requested concurrently', async () => {
       const user = await newUser();
       const category = await createCategory(user);
