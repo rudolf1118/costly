@@ -1,7 +1,8 @@
 # @costly/shared
 
-Framework-free TypeScript shared by Costly's clients (ADR-0010). No React, no browser APIs, no
-Node APIs. The web app imports the TypeScript source directly; there is no build step yet.
+Framework-free TypeScript shared by Costly's clients (ADR-0010). No React, and no browser- or
+Node-only APIs: the one platform API it uses is `fetch`, which browsers, Node and React Native all
+have. The web app imports the TypeScript source directly; there is no build step yet.
 
 ## Money
 
@@ -53,3 +54,22 @@ Decided with the project owner on 2026-11-14, as ADR-0010 left open.
   generic problem with the status and a title, so there is always something to show.
 - It takes a structural `ResponseLike` rather than the DOM `Response` type, so the package needs
   no browser or Node type definitions.
+
+## API client
+
+`createApiClient({ baseUrl, session })` is the one way a client calls the API.
+
+- **Errors:** every non-2xx answer becomes an `ApiError` with `kind: 'http'`, the status and the
+  problem details. No answer at all is `kind: 'network'`; a body that fails its schema is
+  `kind: 'invalid-response'`. Messages never contain bodies, tokens or amounts.
+- **Responses** are validated with the zod schema passed to `request`, so a drifted contract is an
+  error, never a wrong figure. `identity.ts` has the schemas of the identity endpoints.
+- **Bodies** are JSON; a `bigint` is written as its exact decimal string (ADR-0002).
+- **Authentication:** authenticated requests carry the session's access token. With no token, or
+  after a 401, the client asks the session to refresh **once** and replays the request **once**.
+  Concurrent refreshes share one request, because the API accepts each refresh token only once
+  (ADR-0006).
+- **Sessions are platform-specific.** The client takes a `SessionHandler`: the web keeps the refresh
+  token in its HttpOnly cookie, a native client would keep it in secure storage (ADR-0011).
+  `refresh()` resolves to `null` when the session has ended and rejects for anything else, such as
+  the network being down, so an outage never signs the user out.

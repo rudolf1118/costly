@@ -17,3 +17,21 @@ export {
   readProblem,
   type ResponseLike,
 } from './problem-details';
+export {
+  type ApiClient,
+  type ApiClientOptions,
+  ApiError,
+  type ApiErrorKind,
+  createApiClient,
+  type RequestOptions,
+  type SessionHandler,
+} from './api-client';
+export {
+  type AccessToken,
+  accessTokenSchema,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+  passwordLength,
+  type UserProfile,
+  userProfileSchema,
+} from './identity';

@@ -79,6 +79,11 @@ export interface ThemeColors {
   warningInk: string;
   info: string;
 
+  /** The brand panel beside the sign-in form: Cobalt 800 in both themes. */
+  brand: string;
+  onBrand: string;
+  onBrandSecondary: string;
+
   /** Toasts and tooltips: the inverse of the page. */
   inverse: string;
   onInverse: string;
@@ -132,6 +137,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     warningInk: '#6E4100',
     info: '#1F6391',
 
+    brand: cobalt[800],
+    onBrand: '#FFFFFF',
+    onBrandSecondary: cobalt[200],
+
     inverse: '#17191D',
     onInverse: '#FFFFFF',
     onInverseSecondary: '#C9CED6',
@@ -183,6 +192,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     warningSoft: '#33270F',
     warningInk: '#E8C27A',
     info: '#7FB5DE',
+
+    brand: cobalt[800],
+    onBrand: '#FFFFFF',
+    onBrandSecondary: cobalt[200],
 
     inverse: '#ECEEF1',
     onInverse: '#17191D',
