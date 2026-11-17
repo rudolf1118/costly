@@ -1,12 +1,15 @@
-import { type Account, ACCOUNT_TYPE_LABELS, formatAmd } from '@costly/shared';
+import { type Account, ACCOUNT_TYPE_LABELS } from '@costly/shared';
 import { getRouteApi } from '@tanstack/react-router';
-import { formatCalendarDate } from '../../lib/dates';
+import { Pencil, Plus } from 'lucide-react';
+import { useState } from 'react';
 import { Alert } from '../../ui/Alert';
 import { Button } from '../../ui/Button';
 import { EmptyState } from '../../ui/EmptyState';
 import { PageHeader } from '../../ui/PageHeader';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Skeleton } from '../../ui/Skeleton';
+import { AccountFormDialog } from './AccountFormDialog';
+import { OpeningBalance } from './OpeningBalance';
 import { useAccounts } from './queries';
 
 const route = getRouteApi('/app/accounts');
@@ -27,10 +30,25 @@ export function AccountsPage() {
   const view: AccountsView = route.useSearch().view ?? 'active';
   const navigate = route.useNavigate();
   const accounts = useAccounts(view);
+  const [formOpen, setFormOpen] = useState(false);
+  // The account being edited, or none while adding one. Kept after closing,
+  // so the drawer's content doesn't change while it animates out.
+  const [editing, setEditing] = useState<Account | undefined>();
+  const openForm = (account?: Account) => {
+    setEditing(account);
+    setFormOpen(true);
+  };
+
+  const addAccount = (
+    <Button onClick={() => openForm()}>
+      <Plus aria-hidden="true" className="size-4" />
+      New account
+    </Button>
+  );
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Accounts" />
+      <PageHeader title="Accounts" actions={addAccount} />
 
       <SegmentedControl
         label="Show accounts"
@@ -59,7 +77,7 @@ export function AccountsPage() {
           </Alert>
         ) : accounts.data.length === 0 ? (
           view === 'active' ? (
-            <EmptyState title="No accounts yet">
+            <EmptyState title="No accounts yet" action={addAccount}>
               Add the places your money is kept, such as a bank card, cash or savings, with the
               balance each had on a day you choose.
             </EmptyState>
@@ -69,26 +87,42 @@ export function AccountsPage() {
             </EmptyState>
           )
         ) : (
-          <AccountList accounts={accounts.data} />
+          <AccountList accounts={accounts.data} onEdit={view === 'active' ? openForm : undefined} />
         )}
       </section>
+
+      <AccountFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        account={editing}
+        onSaved={() => {
+          // A new account is active: show it there.
+          if (!editing && view !== 'active') void navigate({ search: {}, replace: true });
+        }}
+      />
     </div>
   );
 }
 
-function AccountList({ accounts }: { accounts: Account[] }) {
+interface AccountListProps {
+  accounts: Account[];
+  /** Offered for active accounts only: archived ones are read-only. */
+  onEdit?: ((account: Account) => void) | undefined;
+}
+
+function AccountList({ accounts, onEdit }: AccountListProps) {
   return (
     <ul className="divide-y divide-border rounded-md border border-border bg-surface">
       {accounts.map((account) => (
         <li key={account.id}>
-          <AccountRow account={account} />
+          <AccountRow account={account} onEdit={onEdit} />
         </li>
       ))}
     </ul>
   );
 }
 
-function AccountRow({ account }: { account: Account }) {
+function AccountRow({ account, onEdit }: { account: Account; onEdit: AccountListProps['onEdit'] }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3.5 sm:px-5">
       <div className="flex min-w-0 flex-col gap-0.5">
@@ -98,21 +132,20 @@ function AccountRow({ account }: { account: Account }) {
           {account.isLiquid ? ' · Spendable' : ''}
         </span>
       </div>
-      <OpeningBalance account={account} />
-    </div>
-  );
-}
-
-/** The amount and the day it applies to, always named as the opening balance. */
-export function OpeningBalance({ account }: { account: Account }) {
-  return (
-    <div className="flex flex-col sm:items-end">
-      <span className="text-label text-text-secondary">
-        Opening balance, {formatCalendarDate(account.openingDate)}
-      </span>
-      <span className="font-mono text-body font-medium tabular-nums">
-        {formatAmd(account.openingBalance)}
-      </span>
+      <div className="flex items-center gap-2">
+        <OpeningBalance account={account} className="sm:items-end" />
+        {onEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={`Edit ${account.name}`}
+            className="px-2"
+            onClick={() => onEdit(account)}
+          >
+            <Pencil aria-hidden="true" className="size-4" />
+          </Button>
+        )}
+      </div>
     </div>
   );
 }
