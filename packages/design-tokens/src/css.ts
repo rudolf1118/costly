@@ -57,6 +57,19 @@ const block = (selector: string, lines: string[], indent = '') =>
   `${indent}${selector} {\n${lines.map((l) => `${indent}  ${l}`).join('\n')}\n${indent}}`;
 
 /**
+ * Tailwind utility names for the design's radii. The design's `s`, `m` and
+ * `l` can't be used directly: `rounded-s` is Tailwind's start-corners
+ * utility. So `rounded-sm` is the design's `s`, `rounded-md` its `m`.
+ */
+export const TAILWIND_RADIUS: Record<keyof typeof radius, string> = {
+  xs: 'xs',
+  s: 'sm',
+  m: 'md',
+  l: 'lg',
+  full: 'full',
+};
+
+/**
  * A Tailwind CSS v4 theme that exposes exactly the tokens and nothing else:
  * Tailwind's own palette, type scale, radii, shadows and breakpoints are
  * cleared, so `bg-surface` or `text-body` work and `bg-blue-500` doesn't.
@@ -87,8 +100,8 @@ export function tailwindThemeCss(): string {
       `--text-${name}--letter-spacing: var(${v}-tracking);`,
     );
   }
-  for (const name of Object.keys(radius)) {
-    inline.push(`--radius-${name}: var(${PREFIX}-radius-${name});`);
+  for (const [name, utility] of Object.entries(TAILWIND_RADIUS)) {
+    inline.push(`--radius-${utility}: var(${PREFIX}-radius-${name});`);
   }
   for (const name of Object.keys(elevation.light)) {
     inline.push(`--shadow-${name}: var(${PREFIX}-shadow-${name});`);

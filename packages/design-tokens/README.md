@@ -23,6 +23,24 @@ cannot drift.
 
 Spacing is a 4 px scale, which is Tailwind's default, so it is not re-declared.
 
+## Tailwind
+
+`tailwind.css` is a generated Tailwind v4 theme that exposes only these tokens: Tailwind's own
+palette, type scale, radii, shadows, easings and breakpoints are cleared. Utilities read the
+`--costly-*` variables, so they follow the theme at runtime.
+
+| Token | Utility |
+|---|---|
+| colour `textSecondary` | `text-text-secondary`, `bg-…`, `border-…` |
+| text style `body` | `text-body` (size, line height, weight and tracking together) |
+| radius `xs`, `s`, `m`, `l` | `rounded-xs`, `rounded-sm`, `rounded-md`, `rounded-lg` |
+| elevation `e1`, `e2` | `shadow-e1`, `shadow-e2` |
+| motion `control` | `ease-control` with `duration-160` |
+| breakpoints | `sm:` 768, `md:` 1024, `lg:` 1440 |
+
+The design's `s`, `m` and `l` radii are renamed because `rounded-s` is Tailwind's start-corners
+utility.
+
 ## Themes
 
 Light is the default. `data-theme="dark"` or `data-theme="light"` on `<html>` forces a theme;

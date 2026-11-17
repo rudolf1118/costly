@@ -96,9 +96,9 @@
   --text-caption--font-weight: var(--costly-text-caption-weight);
   --text-caption--letter-spacing: var(--costly-text-caption-tracking);
   --radius-xs: var(--costly-radius-xs);
-  --radius-s: var(--costly-radius-s);
-  --radius-m: var(--costly-radius-m);
-  --radius-l: var(--costly-radius-l);
+  --radius-sm: var(--costly-radius-s);
+  --radius-md: var(--costly-radius-m);
+  --radius-lg: var(--costly-radius-l);
   --radius-full: var(--costly-radius-full);
   --shadow-e1: var(--costly-shadow-e1);
   --shadow-e2: var(--costly-shadow-e2);
