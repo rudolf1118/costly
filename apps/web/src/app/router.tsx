@@ -10,6 +10,7 @@ import {
 import { useEffect } from 'react';
 import { AuthLayout } from '../auth/AuthLayout';
 import type { SessionStore } from '../auth/session';
+import { AccountDetailsPage } from '../features/accounts/AccountDetailsPage';
 import { AccountsPage } from '../features/accounts/AccountsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
@@ -113,6 +114,13 @@ const accountsRoute = createRoute({
   staticData: { title: 'Accounts' },
 });
 
+const accountDetailsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/accounts/$accountId',
+  component: AccountDetailsPage,
+  staticData: { title: 'Account' },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -137,7 +145,7 @@ const registerRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  appRoute.addChildren([overviewRoute, accountsRoute, settingsRoute]),
+  appRoute.addChildren([overviewRoute, accountsRoute, accountDetailsRoute, settingsRoute]),
   authRoute.addChildren([loginRoute, registerRoute]),
 ]);
 

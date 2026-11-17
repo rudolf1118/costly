@@ -1,5 +1,5 @@
 import { type Account, ACCOUNT_TYPE_LABELS } from '@costly/shared';
-import { getRouteApi } from '@tanstack/react-router';
+import { getRouteApi, Link } from '@tanstack/react-router';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { Alert } from '../../ui/Alert';
@@ -124,28 +124,34 @@ function AccountList({ accounts, onEdit }: AccountListProps) {
 
 function AccountRow({ account, onEdit }: { account: Account; onEdit: AccountListProps['onEdit'] }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-4 py-3.5 sm:px-5">
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-body font-medium">{account.name}</span>
-        <span className="text-body-small text-text-secondary">
-          {ACCOUNT_TYPE_LABELS[account.type]}
-          {account.isLiquid ? ' · Spendable' : ''}
-        </span>
-      </div>
-      <div className="flex items-center gap-2">
-        <OpeningBalance account={account} className="sm:items-end" />
-        {onEdit && (
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`Edit ${account.name}`}
-            className="px-2"
-            onClick={() => onEdit(account)}
+    <div className="flex items-center gap-2 px-4 py-3.5 sm:px-5">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <Link
+            to="/accounts/$accountId"
+            params={{ accountId: account.id }}
+            className="truncate rounded-xs text-body font-medium hover:text-accent-text hover:underline"
           >
-            <Pencil aria-hidden="true" className="size-4" />
-          </Button>
-        )}
+            {account.name}
+          </Link>
+          <span className="text-body-small text-text-secondary">
+            {ACCOUNT_TYPE_LABELS[account.type]}
+            {account.isLiquid ? ' · Spendable' : ''}
+          </span>
+        </div>
+        <OpeningBalance account={account} className="sm:items-end" />
       </div>
+      {onEdit && (
+        <Button
+          variant="ghost"
+          size="sm"
+          aria-label={`Edit ${account.name}`}
+          className="shrink-0 px-2"
+          onClick={() => onEdit(account)}
+        >
+          <Pencil aria-hidden="true" className="size-4" />
+        </Button>
+      )}
     </div>
   );
 }

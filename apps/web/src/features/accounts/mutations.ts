@@ -37,3 +37,19 @@ export function useUpdateAccount(id: string) {
     api.request(`/accounts/${id}`, { method: 'PATCH', body, schema: accountSchema }),
   );
 }
+
+/** Archiving an archived account changes nothing, so a repeated click is harmless. */
+export function useArchiveAccount(id: string) {
+  const { api } = useSessionStore();
+  return useAccountWrite(() =>
+    api.request(`/accounts/${id}/archive`, { method: 'POST', schema: accountSchema }),
+  );
+}
+
+/** Fails with 409 while an active account uses the same name. */
+export function useRestoreAccount(id: string) {
+  const { api } = useSessionStore();
+  return useAccountWrite(() =>
+    api.request(`/accounts/${id}/restore`, { method: 'POST', schema: accountSchema }),
+  );
+}
