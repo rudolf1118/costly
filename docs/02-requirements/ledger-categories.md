@@ -26,7 +26,7 @@ System categories are **one shared set of rows**, not copied per user (technical
 | Field | Rule | Source |
 |---|---|---|
 | `kind` | `income` or `expense`. **Immutable.** A subcategory has its parent's kind. | technical design; immutability decided here |
-| `nature` | For `expense`: required, one of `essential_fixed`, `essential_variable`, `discretionary`. For `income`: always `null`, and sending one is a 400. Can be changed on the user's own expense categories. A subcategory's nature is its own: `Food` is `essential_variable`, `Food → Restaurants` is `discretionary`. | technical design, product analysis; changeability decided here |
+| `nature` | For `expense`: required, one of `essential_fixed`, `essential_variable`, `discretionary`. For `income`: always `null`; sending a value is a 400, and an explicit `null` is accepted, since responses carry it. Can be changed on the user's own expense categories. A subcategory's nature is its own: `Food` is `essential_variable`, `Food → Restaurants` is `discretionary`. | technical design, product analysis; changeability decided here |
 | `name` | The same rules as account names: normalized to Unicode NFC, trimmed, 1–64 characters, no control characters. | decided here, reusing the accounts rules |
 | `parentId` | `null` for a top-level category. Otherwise a **top-level** category (depth ≤ 2) of the same kind that is either a system category or the user's own, and active. Users may add their own subcategory under a system parent, such as `Food → Coffee`. **Immutable.** | depth: technical design; system parents: **owner** |
 | `isSystem` | `true` for system categories. | decided here |

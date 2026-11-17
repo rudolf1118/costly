@@ -12,21 +12,25 @@ export const INCOME_HAS_NO_NATURE = 'Income categories have no nature';
 
 /**
  * docs/02-requirements/ledger-categories.md. Expense categories need a
- * nature; income categories must not send one. Whether parentId names a
+ * nature; income categories must not send one, though null is accepted
+ * because responses carry "nature": null for income. Whether parentId names a
  * usable parent is checked by the service, against the database.
  */
 export const createCategorySchema = z
   .strictObject({
     name: displayName,
     kind: categoryKind,
-    nature: categoryNature.optional(),
+    nature: categoryNature.nullable().optional(),
     parentId: z.uuid({ error: 'Must be a category id (UUID)' }).nullable().optional(),
   })
   .superRefine((category, context) => {
-    if (category.kind === 'income' && category.nature !== undefined) {
+    if (category.kind === 'income' && category.nature !== undefined && category.nature !== null) {
       context.addIssue({ code: 'custom', path: ['nature'], message: INCOME_HAS_NO_NATURE });
     }
-    if (category.kind === 'expense' && category.nature === undefined) {
+    if (
+      category.kind === 'expense' &&
+      (category.nature === undefined || category.nature === null)
+    ) {
       context.addIssue({
         code: 'custom',
         path: ['nature'],

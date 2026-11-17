@@ -282,6 +282,21 @@ describe('categories', () => {
       expect(category).toMatchObject({ kind: 'income', nature: null, parentId: null });
     });
 
+    // Responses carry "nature": null for income, so a client may send it back.
+    it('accepts an explicit null nature for income and rejects it for expense', async () => {
+      const user = await newUser();
+
+      const income = await createCategory(user, { kind: 'income', nature: null });
+      const res = await as(user)
+        .post('/categories', validCategory({ nature: null }))
+        .expect(400);
+
+      expect(income.nature).toBeNull();
+      expect(res.body.errors).toEqual([
+        { path: 'nature', message: 'Required for expense categories' },
+      ]);
+    });
+
     it("creates a subcategory under a system category and under the user's own", async () => {
       const user = await newUser();
       const own = await createCategory(user);
