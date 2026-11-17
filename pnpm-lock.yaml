@@ -296,6 +296,9 @@ importers:
       '@costly/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
+      '@costly/shared':
+        specifier: workspace:*
+        version: link:../../packages/shared
       '@fontsource-variable/geist':
         specifier: 5.3.0
         version: 5.3.0
