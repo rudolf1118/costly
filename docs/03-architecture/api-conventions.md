@@ -1,7 +1,7 @@
 # API conventions
 
-How the HTTP API behaves for every endpoint: errors, request validation, authentication and rate
-limiting. Pagination and versioning are added with the first endpoints that need them.
+How the HTTP API behaves for every endpoint: errors, request validation, authentication, rate
+limiting and pagination. Versioning is added when the first endpoint needs it.
 
 ## Errors: RFC 9457 problem details
 
@@ -176,13 +176,14 @@ An account in a response:
   "isLiquid": true,
   "openingBalance": "250000",
   "openingDate": "2026-01-01",
+  "balance": "1150000",
   "archivedAt": null,
   "createdAt": "2026-11-10T07:12:03.120Z",
   "updatedAt": "2026-11-10T07:12:03.120Z"
 }
 ```
 
-It never includes the owner id or a current balance. A balance can only be derived from the ledger, which doesn't exist yet.
+It never includes the owner id. `balance` is the current balance: `openingBalance` plus income minus expenses over the account's transactions, computed by the database on every read ([`ledger-transactions.md`](../02-requirements/ledger-transactions.md#balance)). A balance is a sum, so unlike a single amount it isn't limited to ±999,999,999,999,999; clients read it as an exact integer.
 
 | Request | Body | Success | Errors |
 |---|---|---|---|
@@ -239,6 +240,52 @@ It never includes the owner id. `nature` is `null` exactly for income categories
 - **403** `"System categories can't be changed."` answers any change to a system category, which every user can see.
 - A `parentId` the caller can't use gets the same 400 message whether it is missing or another user's.
 - All errors also include 401 for a missing or invalid access token.
+
+### Transactions
+
+Every `/transactions` route requires `Authorization: Bearer <accessToken>` and acts only on the caller's transactions. Behaviour, rules and their sources are in [`02-requirements/ledger-transactions.md`](../02-requirements/ledger-transactions.md).
+
+A transaction in a response:
+
+```json
+{
+  "id": "01a1f083-ce6a-736d-9190-90f0dc9eab54",
+  "type": "expense",
+  "accountId": "01a1b5c2-4d3e-7f60-8a1b-2c3d4e5f6a7b",
+  "categoryId": "00000000-0000-7000-8000-000000000010",
+  "amount": "450000",
+  "currency": "AMD",
+  "occurredOn": "2026-11-18",
+  "description": "Taxi home",
+  "createdAt": "2026-11-18T21:15:32.330Z",
+  "updatedAt": "2026-11-18T21:15:32.330Z"
+}
+```
+
+`amount` is always positive; `type` gives the direction. The currency is the account's and can't be sent.
+
+| Request | Body | Success | Errors |
+|---|---|---|---|
+| `POST /transactions` | `type` (`income`, `expense`), `accountId`, `categoryId`, `amount`, `occurredOn`; optional `description` | `201` + `Location: /transactions/:id` | 400 (fields, including an unusable account or category, a category of the other kind, or a date before the account's opening date); 409 account or category archived |
+| `GET /transactions?accountId&categoryId&type&from&to&limit&cursor` | — | `200 { "items": [...], "nextCursor": string \| null }`, newest first | 400 for an invalid value, an unknown parameter, `from` after `to` or a malformed cursor |
+| `GET /transactions/:id` | — | `200` transaction | 400 malformed id; 404 |
+| `PATCH /transactions/:id` | at least one of `type`, `accountId`, `categoryId`, `amount`, `occurredOn`, `description` (`null` clears it) | `200` transaction | 400; 404; 409 account archived, or an archived category being assigned |
+| `DELETE /transactions/:id` | — | `204` | 400; 404; 409 account archived |
+
+- **404** is always `"Transaction not found."`, whether the transaction doesn't exist or belongs to someone else.
+- An `accountId` or `categoryId` the caller can't use gets the same 400 message whether it is missing or another user's. As a list filter, it simply matches nothing.
+- All errors also include 401 for a missing or invalid access token.
+
+### Pagination
+
+Lists that can grow without bound use **keyset (cursor) pagination**, first on `GET /transactions`:
+
+- The order is total: `occurredOn` descending, then `id` descending. Ids are unique, so no two rows tie.
+- A page has at most `limit` items (1–100, default 50) and `nextCursor`, which is `null` on the last page. The next page is requested with `cursor=<nextCursor>` and the same filters.
+- The cursor encodes the last row's sort key; the next page is the rows strictly after it. Unlike an offset, rows added or deleted between requests never make another row repeat or disappear.
+- Cursors are opaque base64url strings. Clients must not build or edit them; the API validates every one.
+
+Short lists, such as accounts and categories, return everything as `{ "items": [...] }`.
 
 ## Authentication
 

@@ -60,9 +60,11 @@ create ──▶ active ──archive──▶ archived ──restore──▶ a
 
 Creating a subcategory under an archived parent is a 409 as well. Together these rules mean an active category never has an archived parent.
 
-### For transactions (a later task)
+### For transactions
 
-- A transaction will need an **active** category that is a system category or the user's own, with a kind matching the transaction's type.
+Implemented as written by the transactions task ([`ledger-transactions.md`](ledger-transactions.md)):
+
+- A transaction needs an **active** category that is a system category or the user's own, with a kind matching the transaction's type.
 - An archived category stays valid on the transactions that already use it. It stays readable through `GET /categories/:id` and `?status=archived`, so history keeps its labels.
 - Because kind and parent can't change, a transaction's classification can't be changed under it.
 
