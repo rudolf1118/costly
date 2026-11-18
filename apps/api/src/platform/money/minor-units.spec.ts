@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bigintAsString, MAX_MINOR_UNITS, minorUnits } from './minor-units';
+import { bigintAsString, MAX_MINOR_UNITS, minorUnits, positiveMinorUnits } from './minor-units';
 
 describe('minorUnits', () => {
   it.each([
@@ -50,5 +50,29 @@ describe('bigintAsString', () => {
     expect(JSON.stringify(body, bigintAsString)).toBe(
       '{"amount":"4611686018427387904","items":[{"balance":"-150000"}],"other":7}',
     );
+  });
+});
+
+describe('positiveMinorUnits', () => {
+  it.each([
+    ['1', 1n],
+    ['450000', 450_000n],
+    ['999999999999999', MAX_MINOR_UNITS],
+  ])('parses %j exactly', (input, expected) => {
+    expect(positiveMinorUnits.parse(input)).toBe(expected);
+  });
+
+  it.each([
+    ['zero', '0'],
+    ['a negative amount', '-450000'],
+    ['negative zero', '-0'],
+    ['a plus sign', '+450000'],
+    ['a JSON number', 450000],
+    ['a decimal', '4500.50'],
+    ['a leading zero', '0450000'],
+    ['16 digits', '1000000000000000'],
+    ['an empty string', ''],
+  ])('rejects %s', (_label, input) => {
+    expect(positiveMinorUnits.safeParse(input).success).toBe(false);
   });
 });
