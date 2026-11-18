@@ -1,6 +1,6 @@
 import { type Account, ACCOUNT_TYPE_LABELS, ApiError, formatAmd } from '@costly/shared';
 import { getRouteApi, Link } from '@tanstack/react-router';
-import { ArchiveRestore, ChevronLeft, Pencil } from 'lucide-react';
+import { ArchiveRestore, ArrowLeftRight, ChevronLeft, Pencil } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toFormError } from '../../auth/errors';
 import { formatCalendarDate } from '../../lib/dates';
@@ -134,13 +134,27 @@ function AccountDetails({ account }: { account: Account }) {
     }
   };
 
-  const actions = archived ? (
-    <Button variant="secondary" loading={restore.isPending} onClick={() => void onRestore()}>
-      <ArchiveRestore aria-hidden="true" className="size-4" />
-      Restore
+  // Its transactions stay viewable while archived, only not changeable.
+  const transactionsLink = (
+    <Button asChild variant="secondary">
+      <Link to="/transactions" search={{ accountId: account.id }}>
+        <ArrowLeftRight aria-hidden="true" className="size-4" />
+        Transactions
+      </Link>
     </Button>
+  );
+
+  const actions = archived ? (
+    <>
+      {transactionsLink}
+      <Button variant="secondary" loading={restore.isPending} onClick={() => void onRestore()}>
+        <ArchiveRestore aria-hidden="true" className="size-4" />
+        Restore
+      </Button>
+    </>
   ) : (
     <>
+      {transactionsLink}
       <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
         Archive
       </Button>

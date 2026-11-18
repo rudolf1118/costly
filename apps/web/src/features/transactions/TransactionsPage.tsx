@@ -8,21 +8,27 @@ import {
   type TransactionType,
 } from '@costly/shared';
 import { getRouteApi, Link } from '@tanstack/react-router';
-import { type ReactNode, useMemo } from 'react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { toFormError } from '../../auth/errors';
 import { formatCalendarDate } from '../../lib/dates';
 import { Alert } from '../../ui/Alert';
 import { Button } from '../../ui/Button';
 import { cn } from '../../ui/cn';
+import { Dialog, DialogClose, DialogContent } from '../../ui/Dialog';
 import { EmptyState } from '../../ui/EmptyState';
 import { PageHeader } from '../../ui/PageHeader';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { SelectField } from '../../ui/SelectField';
 import { Skeleton } from '../../ui/Skeleton';
 import { TextField } from '../../ui/TextField';
+import { useToast } from '../../ui/Toast';
 import { useAccounts } from '../accounts/queries';
 import { categoryLabel, useCategories } from '../categories/queries';
+import { useDeleteTransaction } from './mutations';
 import { useTransactions } from './queries';
 import { hasFilters } from './search';
+import { TransactionFormDialog } from './TransactionFormDialog';
 
 const route = getRouteApi('/app/transactions');
 
@@ -38,6 +44,22 @@ const TYPE_VIEWS = [
 export interface Lookups {
   accounts: ReadonlyMap<string, Account>;
   categories: ReadonlyMap<string, Category>;
+}
+
+/** What a row offers. Transactions of an archived account are read-only, so they get none. */
+interface RowActions {
+  onEdit(transaction: Transaction): void;
+  onDelete(transaction: Transaction): void;
+}
+
+/** "Food › Groceries, −18,500 ֏, 12 Nov 2026": how a transaction is named in labels. */
+function transactionName(transaction: Transaction, lookups: Lookups): string {
+  const category = lookups.categories.get(transaction.categoryId);
+  return [
+    category ? categoryLabel(category, lookups.categories) : 'Transaction',
+    formatAmd(signedAmount(transaction), { sign: 'always' }),
+    formatCalendarDate(transaction.occurredOn),
+  ].join(', ');
 }
 
 /**
@@ -71,9 +93,42 @@ export function TransactionsPage() {
 
   const invalidRange = Boolean(filters.from && filters.to && filters.from > filters.to);
 
+  // The form: kept after closing, so the drawer's content doesn't change while it animates out.
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Transaction | undefined>();
+  const [newType, setNewType] = useState<TransactionType>('expense');
+  const [deleting, setDeleting] = useState<Transaction | undefined>();
+  const openNew = (type: TransactionType) => {
+    setEditing(undefined);
+    setNewType(type);
+    setFormOpen(true);
+  };
+  const actions: RowActions = {
+    onEdit: (transaction) => {
+      setEditing(transaction);
+      setFormOpen(true);
+    },
+    onDelete: setDeleting,
+  };
+
+  // Recording needs an active account; until the accounts load, the buttons wait.
+  const canRecord = (accounts.data ?? []).some((account) => account.archivedAt === null);
+  const header = (
+    <>
+      <Button variant="secondary" disabled={!canRecord} onClick={() => openNew('income')}>
+        <Plus aria-hidden="true" className="size-4" />
+        Income
+      </Button>
+      <Button disabled={!canRecord} onClick={() => openNew('expense')}>
+        <Plus aria-hidden="true" className="size-4" />
+        Expense
+      </Button>
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Transactions" />
+      <PageHeader title="Transactions" actions={header} />
 
       <Filters
         filters={filters}
@@ -92,11 +147,97 @@ export function TransactionsPage() {
             filters={filters}
             lookups={lookups}
             hasAccounts={accounts.data === undefined || accounts.data.length > 0}
+            actions={actions}
             onClearFilters={() => void navigate({ search: {}, replace: true })}
           />
         )}
       </section>
+
+      <TransactionFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        transaction={editing}
+        initialType={newType}
+        defaultAccountId={filters.accountId}
+        accounts={accounts.data ?? []}
+        categories={categories.data ?? []}
+      />
+      <DeleteDialog
+        transaction={deleting}
+        lookups={lookups}
+        onClose={() => setDeleting(undefined)}
+      />
     </div>
+  );
+}
+
+/** Asks before deleting: a transaction is deleted for good, and the balance changes at once. */
+function DeleteDialog({
+  transaction,
+  lookups,
+  onClose,
+}: {
+  transaction: Transaction | undefined;
+  lookups: Lookups;
+  onClose(): void;
+}) {
+  const remove = useDeleteTransaction();
+  const toast = useToast();
+  const [error, setError] = useState<string | null>(null);
+  const alertRef = useRef<HTMLDivElement>(null);
+  // Kept while the dialog animates out after a delete.
+  const [shown, setShown] = useState(transaction);
+  if (transaction && transaction !== shown) setShown(transaction);
+
+  useEffect(() => {
+    if (error) alertRef.current?.focus();
+  }, [error]);
+
+  const onDelete = async () => {
+    if (!transaction) return;
+    setError(null);
+    try {
+      await remove.mutateAsync(transaction.id);
+      toast({ title: 'Transaction deleted' });
+      onClose();
+    } catch (failure) {
+      setError(toFormError(failure, []).message ?? null);
+    }
+  };
+
+  return (
+    <Dialog
+      open={transaction !== undefined}
+      onOpenChange={(open) => {
+        if (!open) {
+          setError(null);
+          onClose();
+        }
+      }}
+    >
+      <DialogContent
+        title="Delete this transaction?"
+        description={
+          shown
+            ? `${transactionName(shown, lookups)}. It is deleted for good, and the account’s balance changes at once.`
+            : undefined
+        }
+      >
+        {error && (
+          <Alert ref={alertRef} className="mb-4">
+            {error}
+          </Alert>
+        )}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <DialogClose asChild>
+            <Button variant="secondary">Cancel</Button>
+          </DialogClose>
+          <Button variant="destructive" loading={remove.isPending} onClick={() => void onDelete()}>
+            Delete
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -199,6 +340,7 @@ interface TransactionResultsProps {
   filters: TransactionFilters;
   lookups: Lookups;
   hasAccounts: boolean;
+  actions: RowActions;
   onClearFilters(): void;
 }
 
@@ -206,6 +348,7 @@ function TransactionResults({
   filters,
   lookups,
   hasAccounts,
+  actions,
   onClearFilters,
 }: TransactionResultsProps) {
   const transactions = useTransactions(filters);
@@ -270,7 +413,7 @@ function TransactionResults({
   return (
     <div className="flex flex-col gap-6">
       {groupByDay(items).map(([day, dayItems]) => (
-        <DayGroup key={day} day={day} items={dayItems} lookups={lookups} />
+        <DayGroup key={day} day={day} items={dayItems} lookups={lookups} actions={actions} />
       ))}
       {transactions.hasNextPage && (
         <Button
@@ -301,10 +444,12 @@ function DayGroup({
   day,
   items,
   lookups,
+  actions,
 }: {
   day: string;
   items: Transaction[];
   lookups: Lookups;
+  actions: RowActions;
 }) {
   const headingId = `day-${day}`;
   return (
@@ -315,7 +460,15 @@ function DayGroup({
       <ul className="divide-y divide-border rounded-md border border-border bg-surface">
         {items.map((transaction) => (
           <li key={transaction.id}>
-            <TransactionRow transaction={transaction} lookups={lookups} />
+            <TransactionRow
+              transaction={transaction}
+              lookups={lookups}
+              actions={
+                lookups.accounts.get(transaction.accountId)?.archivedAt === null ? (
+                  <RowButtons transaction={transaction} lookups={lookups} actions={actions} />
+                ) : undefined
+              }
+            />
           </li>
         ))}
       </ul>
@@ -359,6 +512,40 @@ export function TransactionRow({
         </span>
       </div>
       {actions}
+    </div>
+  );
+}
+
+function RowButtons({
+  transaction,
+  lookups,
+  actions,
+}: {
+  transaction: Transaction;
+  lookups: Lookups;
+  actions: RowActions;
+}) {
+  const name = transactionName(transaction, lookups);
+  return (
+    <div className="flex shrink-0">
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={`Edit ${name}`}
+        className="px-2"
+        onClick={() => actions.onEdit(transaction)}
+      >
+        <Pencil aria-hidden="true" className="size-4" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label={`Delete ${name}`}
+        className="px-2 text-text-secondary hover:text-negative"
+        onClick={() => actions.onDelete(transaction)}
+      >
+        <Trash2 aria-hidden="true" className="size-4" />
+      </Button>
     </div>
   );
 }

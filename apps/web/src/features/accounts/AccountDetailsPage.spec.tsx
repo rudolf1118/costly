@@ -50,6 +50,10 @@ describe('account details', () => {
     expect(screen.getByText('Opening balance, 1 Nov 2026')).toBeTruthy();
     expect(screen.getByRole('main').textContent).toContain(formatAmd(25000050n));
     expect(screen.getByText('Checking')).toBeTruthy();
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('link', { name: 'Transactions' }).getAttribute('href')).toBe(
+      `/transactions?accountId=${CARD.id}`,
+    );
     expect(document.title).toBe('Account · Costly');
   });
 
