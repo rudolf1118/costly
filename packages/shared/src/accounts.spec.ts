@@ -16,6 +16,7 @@ const wire = {
   isLiquid: true,
   openingBalance: '-1250050',
   openingDate: '2026-11-01',
+  balance: '12000000000099988',
   archivedAt: null,
   createdAt: '2026-11-17T09:00:00.000Z',
   updatedAt: '2026-11-17T09:00:00.000Z',
@@ -26,13 +27,22 @@ describe('accountSchema', () => {
     expect(accountSchema.parse(wire).openingBalance).toBe(-1250050n);
   });
 
+  it('reads the current balance exactly, even beyond the range of one amount', () => {
+    expect(accountSchema.parse(wire).balance).toBe(12_000_000_000_099_988n);
+    expect(accountSchema.parse({ ...wire, balance: '-150000' }).balance).toBe(-150_000n);
+  });
+
   it('keeps fields it does not know about out of the way', () => {
-    expect(accountSchema.parse({ ...wire, balance: 'later' })).not.toHaveProperty('balance');
+    expect(accountSchema.parse({ ...wire, later: 'field' })).not.toHaveProperty('later');
   });
 
   it.each([
     ['a number for the opening balance', { openingBalance: 1250050 }],
     ['a decimal opening balance', { openingBalance: '12500.50' }],
+    ['a number for the balance', { balance: 150000 }],
+    ['a decimal balance', { balance: '1500.50' }],
+    ['negative zero as the balance', { balance: '-0' }],
+    ['a missing balance', { balance: undefined }],
     ['an unknown type', { type: 'loan' }],
     ['a timestamp for the opening date', { openingDate: '2026-11-01T00:00:00Z' }],
   ])('rejects %s', (_case, change) => {

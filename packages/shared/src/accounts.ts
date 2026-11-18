@@ -30,7 +30,17 @@ export const DEFAULT_LIQUIDITY: Record<AccountType, boolean> = {
 };
 
 /** A plain calendar day, YYYY-MM-DD. */
-const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const calendarDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+/** An amount as the API sends it, read into an exact `bigint`. */
+export const minorUnitsField = z.string().transform((value, context) => {
+  try {
+    return parseMinorUnits(value);
+  } catch {
+    context.addIssue({ code: 'custom', message: 'Not a decimal string of minor units' });
+    return z.NEVER;
+  }
+});
 
 /** One account from `GET /accounts`, `GET /accounts/:id` and every write. */
 export const accountSchema = z.object({
@@ -39,16 +49,21 @@ export const accountSchema = z.object({
   type: z.enum(ACCOUNT_TYPES),
   currency: z.string().length(3),
   isLiquid: z.boolean(),
-  /** The balance at the start of `openingDate`, never a current balance. */
-  openingBalance: z.string().transform((value, context) => {
-    try {
-      return parseMinorUnits(value);
-    } catch {
+  /** The balance at the start of `openingDate`. */
+  openingBalance: minorUnitsField,
+  openingDate: calendarDate,
+  /**
+   * The current balance: the opening balance plus income minus expenses over
+   * the account's transactions, computed by the API on every read. It can
+   * exceed the range of a single amount, which `bigint` holds exactly.
+   */
+  balance: z.string().transform((value, context) => {
+    if (!/^-?(?:0|[1-9][0-9]*)$/.test(value) || value === '-0') {
       context.addIssue({ code: 'custom', message: 'Not a decimal string of minor units' });
       return z.NEVER;
     }
+    return BigInt(value);
   }),
-  openingDate: calendarDate,
   archivedAt: z.string().nullable(),
   createdAt: z.string().min(1),
   updatedAt: z.string().min(1),
