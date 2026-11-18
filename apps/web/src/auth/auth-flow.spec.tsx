@@ -259,11 +259,60 @@ describe('when the API is unreachable on start', () => {
     });
     await renderApp('/', api);
     expect(heading().textContent).toBe('Costly can’t be reached');
+    expect(screen.getByText(/Check your connection\./)).toBeTruthy();
 
     up = true;
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
 
     await waitFor(() => expect(heading().textContent).toBe('Overview'));
+  });
+});
+
+describe('when sign-in is rate-limited on start', () => {
+  it('says how long to wait instead of blaming the connection, and can retry', async () => {
+    let limited = true;
+    const api = fakeApi({
+      signedIn: true,
+      routes: {
+        'POST /auth/refresh': () =>
+          limited ? problem(429, {}, { 'Retry-After': '840' }) : accessToken(),
+      },
+    });
+    await renderApp('/', api);
+
+    expect(heading().textContent).toBe('Sign-in is paused for now');
+    expect(
+      screen.getByText(/Too many sign-in attempts from this device\. Try again in 14 minutes\./),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Check your connection/)).toBeNull();
+
+    limited = false;
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    await waitFor(() => expect(heading().textContent).toBe('Overview'));
+  });
+
+  it('says "try again later" when the wait is unknown', async () => {
+    await renderApp(
+      '/',
+      fakeApi({ signedIn: true, routes: { 'POST /auth/refresh': () => problem(429) } }),
+    );
+
+    expect(
+      screen.getByText(/Too many sign-in attempts from this device\. Try again later\./),
+    ).toBeTruthy();
+  });
+});
+
+describe('when the API is temporarily unavailable on start', () => {
+  it('says so instead of blaming the connection', async () => {
+    await renderApp(
+      '/',
+      fakeApi({ signedIn: true, routes: { 'POST /auth/refresh': () => problem(503) } }),
+    );
+
+    expect(heading().textContent).toBe('Costly is temporarily unavailable');
+    expect(screen.queryByText(/Check your connection/)).toBeNull();
   });
 });
 

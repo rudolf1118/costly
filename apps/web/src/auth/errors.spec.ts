@@ -57,6 +57,7 @@ describe('toFormError', () => {
 
   it.each([
     [30, 'Too many attempts. Try again in a minute.'],
+    [60, 'Too many attempts. Try again in a minute.'],
     [840, 'Too many attempts. Try again in 14 minutes.'],
     [undefined, 'Too many attempts. Try again later.'],
   ])('says how long to wait after a 429 (Retry-After %s)', (seconds, message) => {

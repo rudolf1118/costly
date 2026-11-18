@@ -15,10 +15,10 @@ const json = (status: number, body: unknown) =>
     status,
     headers: { 'Content-Type': 'application/json' },
   });
-const problem = (status: number, detail?: string) =>
+const problem = (status: number, detail?: string, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify({ type: 'about:blank', title: 'Error', status, detail }), {
     status,
-    headers: { 'Content-Type': 'application/problem+json' },
+    headers: { 'Content-Type': 'application/problem+json', ...headers },
   });
 const token = (value: string) =>
   json(200, { accessToken: value, tokenType: 'Bearer', expiresIn: 900 });
@@ -91,7 +91,42 @@ describe('SessionStore', () => {
 
     await store.restore();
 
-    expect(store.getSnapshot()).toEqual({ status: 'unavailable' });
+    expect(store.getSnapshot()).toEqual({ status: 'unavailable', reason: 'unreachable' });
+  });
+
+  it('tells a rate-limited refresh apart from an unreachable API', async () => {
+    const api = fakeApi({
+      'POST /auth/refresh': [() => problem(429, undefined, { 'Retry-After': '840' })],
+    });
+    const store = new SessionStore({ baseUrl: BASE, fetch: api.fetch, now });
+
+    await store.restore();
+
+    expect(store.getSnapshot()).toEqual({
+      status: 'unavailable',
+      reason: 'rate-limited',
+      retryAfterSeconds: 840,
+    });
+    expect(api.count('POST /auth/refresh')).toBe(1);
+    expect(store.getAccessToken()).toBeNull();
+  });
+
+  it('is rate-limited without a wait when Retry-After is missing', async () => {
+    const api = fakeApi({ 'POST /auth/refresh': [() => problem(429)] });
+    const store = new SessionStore({ baseUrl: BASE, fetch: api.fetch, now });
+
+    await store.restore();
+
+    expect(store.getSnapshot()).toEqual({ status: 'unavailable', reason: 'rate-limited' });
+  });
+
+  it('tells a 503 apart from an unreachable API', async () => {
+    const api = fakeApi({ 'POST /auth/refresh': [() => problem(503)] });
+    const store = new SessionStore({ baseUrl: BASE, fetch: api.fetch, now });
+
+    await store.restore();
+
+    expect(store.getSnapshot()).toEqual({ status: 'unavailable', reason: 'busy' });
   });
 
   it('retries a refresh once after a 409 from another tab', async () => {

@@ -11,9 +11,10 @@ const UNREACHABLE = 'Costly can’t be reached right now. Check your connection 
 const UNAVAILABLE = 'This service is temporarily unavailable. Try again in a moment.';
 const UNEXPECTED = 'Something went wrong. Try again.';
 
-function wait(seconds: number | undefined): string {
+/** How long to wait, from a 429's `Retry-After`, as a sentence. */
+export function wait(seconds: number | undefined): string {
   if (seconds === undefined) return 'Try again later.';
-  if (seconds < 60) return 'Try again in a minute.';
+  if (seconds <= 60) return 'Try again in a minute.';
   const minutes = Math.ceil(seconds / 60);
   return `Try again in ${minutes} minutes.`;
 }
