@@ -35,3 +35,18 @@ export {
   type UserProfile,
   userProfileSchema,
 } from './identity';
+export {
+  type Account,
+  accountListSchema,
+  accountSchema,
+  type AccountStatusFilter,
+  type AccountType,
+  ACCOUNT_TYPE_LABELS,
+  ACCOUNT_TYPES,
+  checkDisplayName,
+  type CreateAccountBody,
+  DEFAULT_LIQUIDITY,
+  DISPLAY_NAME_MAX,
+  type DisplayNameResult,
+  type UpdateAccountBody,
+} from './accounts';
