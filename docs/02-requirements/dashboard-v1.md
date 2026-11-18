@@ -76,6 +76,18 @@ Percentages are computed by the client from the exact amounts above, in integer 
   month's spending") are fixed sentences filled with these numbers. Nothing is generated, predicted
   or recommended: that is the insights engine of Chapter 4.
 
+## Web client
+
+| Rule | Why |
+|---|---|
+| The overview opens on the current month **in the user's time zone** (their profile's), not the browser's. A past month is kept in the address (`/?month=2026-10`); the current month has none. | the month a day belongs to is the user's |
+| The month picker goes back without limit and forward up to the current month. Every card, chart and list on the page shows the same month; only the accounts list is "now", and says so. | no mixed periods |
+| A past month's balance card is titled "Balance on 31 Oct"; the current month's "Total balance". | the balance follows the month |
+| Charts position marks with numbers, but every amount printed in a tooltip, label or list is formatted from the exact `bigint`. | ADR-0002 |
+| The category donut gives up to six categories their own colour; with more, the five largest keep theirs and the rest fold into one neutral "N other categories" slice, so no colour is generated or reused. The list beside it names every slice with its amount and share, and links to the category's transactions for the month. | colour is never the only label |
+| The daily chart of the current month stops at today: days still ahead would otherwise look like days without spending. | decided here |
+| A user with no active account and no transactions in the month sees one empty state with "Create account". A user with accounts but an empty month sees the cards and accounts, and an empty state in each chart. | no invented numbers |
+
 ## Performance
 
 Five queries per request, each a single aggregate over an index range:

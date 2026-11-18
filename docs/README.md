@@ -30,6 +30,7 @@ docs/
   02-requirements/
     ledger-accounts.md             financial accounts: fields, money, lifecycle, balance semantics
     ledger-categories.md           categories: system vs. custom, two levels, nature, lifecycle, seeding
+    dashboard-v1.md                the monthly dashboard: totals, balances at month end, comparisons, charts
     functional-requirements.md     numbered FR-xx per module (referenced from tests and the thesis)
     non-functional-requirements.md latency targets, correctness invariants, data isolation, local-run requirement
     glossary.md                    baseline, data tier, discretionary, insight, fingerprint, EOM…
