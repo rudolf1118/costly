@@ -83,6 +83,62 @@ describe('dashboard', () => {
     expect(link.textContent).toContain(formatAmd(120000000n));
   });
 
+  it('breaks the month’s spending down by category, each linking to its transactions', async () => {
+    const api = fakeApi({ signedIn: true });
+    await renderApp(
+      '/',
+      apiWith({ [path(THIS_MONTH)]: () => api.json(200, wireSummary(THIS_MONTH)) }),
+    );
+
+    const breakdown = await region('Spending by category');
+    const rows = within(within(breakdown).getByRole('list', { name: 'Categories' })).getAllByRole(
+      'link',
+    );
+    expect(rows.map((row) => row.textContent)).toEqual([
+      `Housing › Rent${formatAmd(22000000n)}90%`,
+      `Food › Groceries${formatAmd(1850000n)}8%`,
+      `Transport › Taxi${formatAmd(650000n)}3%`,
+    ]);
+    const href = new URL(rows[0]!.getAttribute('href')!, 'http://app.test');
+    expect(Object.fromEntries(href.searchParams)).toEqual({
+      categoryId: '00000000-0000-7000-8000-000000000007',
+      type: 'expense',
+      from: `${THIS_MONTH}-01`,
+      to: expect.stringMatching(new RegExp(`^${THIS_MONTH}-(28|29|30|31)$`)),
+    });
+  });
+
+  it('charts income and expenses and offers 6 or 12 months', async () => {
+    const api = fakeApi({ signedIn: true });
+    await renderApp(
+      '/',
+      apiWith({ [path(THIS_MONTH)]: () => api.json(200, wireSummary(THIS_MONTH)) }),
+    );
+
+    const chart = await region('Income vs expenses');
+    expect(within(chart).getAllByRole('row')).toHaveLength(1 + 6);
+    await userEvent.click(within(chart).getByRole('radio', { name: '12 months' }));
+    expect(within(chart).getAllByRole('row')).toHaveLength(1 + 12);
+    expect(await region('Daily spending')).toBeTruthy();
+  });
+
+  it('shows empty chart panels for a month without transactions', async () => {
+    const api = fakeApi({ signedIn: true });
+    const accounts = wireSummary(LAST_MONTH).accounts;
+    await renderApp(
+      `/?month=${LAST_MONTH}`,
+      apiWith({
+        [path(LAST_MONTH)]: () => api.json(200, emptySummary(LAST_MONTH, { accounts })),
+      }),
+    );
+
+    expect((await region('Spending by category')).textContent).toContain('No spending in');
+    expect((await region('Daily spending')).textContent).toContain('No spending in');
+    expect((await region('Income vs expenses')).textContent).toContain(
+      'No income or expenses in these months yet.',
+    );
+  });
+
   it('shows deterministic insights for the month', async () => {
     const api = fakeApi({ signedIn: true });
     await renderApp(

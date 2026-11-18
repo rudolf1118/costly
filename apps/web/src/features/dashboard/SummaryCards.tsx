@@ -37,8 +37,9 @@ export function SummaryCards({
   const monthEnd = monthDays(summary.month).to;
 
   return (
-    <div className="grid grid-cols-1 gap-3 min-[30rem]:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
       <StatCard
+        className="col-span-2 sm:col-span-1"
         icon={Landmark}
         label={isCurrentMonth ? 'Total balance' : `Balance on ${dayAndMonth(monthEnd)}`}
         value={formatAmd(summary.balance.total)}
@@ -63,6 +64,7 @@ export function SummaryCards({
         comparison={changeComparison(summary.expense, summary.previous.expense, previous, 'down')}
       />
       <StatCard
+        className="col-span-2 sm:col-span-1"
         icon={Wallet}
         label="Net cash flow"
         value={formatAmd(summary.net, { sign: 'always' })}
@@ -125,6 +127,7 @@ function changeComparison(
 }
 
 function StatCard({
+  className,
   icon: Icon,
   label,
   value,
@@ -133,6 +136,7 @@ function StatCard({
   note,
   comparison,
 }: {
+  className?: string;
   icon: LucideIcon;
   label: string;
   value: string;
@@ -145,7 +149,8 @@ function StatCard({
   return (
     <div
       className={cn(
-        'relative flex min-w-0 flex-col gap-3 overflow-hidden rounded-md border border-border bg-surface p-4 sm:p-5',
+        'relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-md border border-border bg-surface p-4 sm:gap-3 sm:p-5',
+        className,
         emphasis &&
           'border-accent-soft-strong bg-[linear-gradient(135deg,var(--costly-color-accent-soft),var(--costly-color-surface)_70%)]',
       )}
@@ -155,7 +160,7 @@ function StatCard({
         <span
           aria-hidden="true"
           className={cn(
-            'flex size-8 items-center justify-center rounded-sm',
+            'flex size-7 shrink-0 items-center justify-center rounded-sm sm:size-8',
             emphasis ? 'bg-accent text-on-accent' : 'bg-subtle text-text-secondary',
           )}
         >
@@ -164,7 +169,7 @@ function StatCard({
       </div>
       <p
         className={cn(
-          'truncate font-mono text-[1.5rem] leading-8 font-medium tracking-tight tabular-nums',
+          'truncate font-mono text-[1.25rem] leading-7 font-medium tracking-tight tabular-nums sm:text-[1.5rem] sm:leading-8',
           valueTone === 'positive' && 'text-positive',
           valueTone === 'negative' && 'text-negative',
         )}

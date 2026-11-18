@@ -102,3 +102,46 @@
     }
   }
 }
+
+/*
+ * Dashboard chart colours. Income and expense use the theme's positive and
+ * accent colours. The categorical slots are a palette validated for colour
+ * vision deficiencies (adjacent pairs ΔE ≥ 8.4) on both surfaces, stepped
+ * separately for dark mode; "other" is a neutral, never a generated hue.
+ * In light mode three slots are below 3 : 1 on the surface, so every slice
+ * is also named, with its amount, in the list beside the chart.
+ */
+:root,
+[data-theme='light'] {
+  --chart-income: var(--costly-color-positive);
+  --chart-expense: var(--costly-color-accent);
+  --chart-category-1: #2a78d6;
+  --chart-category-2: #eb6834;
+  --chart-category-3: #1baf7a;
+  --chart-category-4: #eda100;
+  --chart-category-5: #e87ba4;
+  --chart-category-6: #6250d6;
+  --chart-category-other: #a3aab5;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --chart-category-1: #3987e5;
+    --chart-category-2: #d95926;
+    --chart-category-3: #199e70;
+    --chart-category-4: #c98500;
+    --chart-category-5: #d55181;
+    --chart-category-6: #9085e9;
+    --chart-category-other: #5d6470;
+  }
+}
+
+[data-theme='dark'] {
+  --chart-category-1: #3987e5;
+  --chart-category-2: #d95926;
+  --chart-category-3: #199e70;
+  --chart-category-4: #c98500;
+  --chart-category-5: #d55181;
+  --chart-category-6: #9085e9;
+  --chart-category-other: #5d6470;
+}

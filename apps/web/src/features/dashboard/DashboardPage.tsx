@@ -7,6 +7,10 @@ import { cn } from '../../ui/cn';
 import { EmptyState } from '../../ui/EmptyState';
 import { PageHeader } from '../../ui/PageHeader';
 import { Skeleton } from '../../ui/Skeleton';
+import { todayIn } from '../../lib/dates';
+import { CategoryBreakdown } from './CategoryBreakdown';
+import { DailySpendingChart } from './DailySpendingChart';
+import { IncomeExpenseChart } from './IncomeExpenseChart';
 import { monthlyInsights } from './insights';
 import { currentMonth } from './month';
 import { MonthPicker } from './MonthPicker';
@@ -82,20 +86,27 @@ export function DashboardPage() {
           <h2 className="sr-only">Summary</h2>
           <SummaryCards summary={summary.data} isCurrentMonth={summary.data.month === latest} />
           <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
+            <IncomeExpenseChart summary={summary.data} className="lg:col-span-2" />
+            <InsightsPanel
+              month={summary.data.month}
+              insights={monthlyInsights(summary.data, summary.data.month === latest)}
+            />
+          </div>
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-2">
+            <CategoryBreakdown summary={summary.data} />
+            <DailySpendingChart summary={summary.data} today={todayIn(timeZone)} />
+          </div>
+          <div className="grid gap-4 sm:gap-6 lg:grid-cols-3">
             <RecentTransactions
               month={summary.data.month}
               transactions={summary.data.recentTransactions}
               total={summary.data.transactionCount}
               className="lg:col-span-2"
             />
-            <InsightsPanel
-              month={summary.data.month}
-              insights={monthlyInsights(summary.data, summary.data.month === latest)}
-            />
+            {summary.data.accounts.length > 0 && (
+              <AccountsOverview accounts={summary.data.accounts} />
+            )}
           </div>
-          {summary.data.accounts.length > 0 && (
-            <AccountsOverview accounts={summary.data.accounts} />
-          )}
         </div>
       )}
     </div>
@@ -106,7 +117,7 @@ function DashboardSkeleton() {
   return (
     <div aria-busy="true" className="flex flex-col gap-4 sm:gap-6">
       <span className="sr-only">Loading your overview</span>
-      <div className="grid grid-cols-1 gap-3 min-[30rem]:grid-cols-2 sm:gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         {[0, 1, 2, 3].map((card) => (
           <div
             key={card}
