@@ -303,15 +303,18 @@ function Filters({ filters, accounts, categories, lookups, invalidRange, onChang
           </Button>
         )}
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Two columns from the narrowest phone: the dates share a row there. */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <SelectField
           label="Account"
+          className="col-span-2 sm:col-span-1"
           options={accountOptions}
           value={filters.accountId ?? ''}
           onChange={(event) => onChange({ accountId: event.target.value || undefined })}
         />
         <SelectField
           label="Category"
+          className="col-span-2 sm:col-span-1"
           options={categoryOptions}
           value={filters.categoryId ?? ''}
           onChange={(event) => onChange({ categoryId: event.target.value || undefined })}
