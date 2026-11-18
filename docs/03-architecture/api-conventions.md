@@ -321,7 +321,8 @@ Redis fixed windows of 15 minutes, checked before validation and before any Argo
 | `POST /auth/logout`, `GET /auth/me` | not limited |
 
 - **Over the limit:** `429` "Too many requests. Try again later." with `Retry-After` in
-  seconds.
+  seconds. CORS exposes `Retry-After` (`Access-Control-Expose-Headers`), so the web client can
+  say how long to wait.
 - **Redis unavailable** (not connected, or slower than 500 ms): `503` "This service is temporarily
   unavailable. Try again later." The limits fail closed.
 - **Unaffected by a Redis outage:** issued access tokens and logout.

@@ -279,6 +279,18 @@ describe('authentication rate limits', () => {
 
       expectTooManyRequests(await post('/auth/refresh', ip));
     });
+
+    it('lets the web client read Retry-After across origins', async () => {
+      const origin = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+      const ip = newClient();
+      for (let i = 0; i < 30; i++) await post('/auth/refresh', ip).set('Origin', origin);
+
+      const res = await post('/auth/refresh', ip).set('Origin', origin);
+
+      expect(res.status).toBe(429);
+      expect(res.headers['access-control-allow-origin']).toBe(origin);
+      expect(res.headers['access-control-expose-headers']).toMatch(/\bRetry-After\b/i);
+    });
   });
 
   it('does not limit logout, which does no expensive work', async () => {
