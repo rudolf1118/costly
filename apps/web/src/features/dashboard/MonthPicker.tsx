@@ -18,6 +18,12 @@ export function MonthPicker({
   const atLatest = month >= latest;
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Month">
+      {/* Before the arrows, so they don't move when it appears. */}
+      {!atLatest && (
+        <Button variant="ghost" size="sm" onClick={() => onChange(latest)}>
+          This month
+        </Button>
+      )}
       <Button
         variant="secondary"
         size="sm"
@@ -43,11 +49,6 @@ export function MonthPicker({
       >
         <ChevronRight aria-hidden="true" className="size-4" />
       </Button>
-      {!atLatest && (
-        <Button variant="ghost" size="sm" onClick={() => onChange(latest)}>
-          This month
-        </Button>
-      )}
     </div>
   );
 }
