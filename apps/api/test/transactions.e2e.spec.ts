@@ -618,6 +618,105 @@ describe('transactions', () => {
     });
   });
 
+  describe('account balances', () => {
+    const balanceOf = async (user: User, accountId: string) =>
+      (await as(user).get(`/accounts/${accountId}`).expect(200)).body.balance as string;
+
+    it('is the opening balance plus income minus expenses', async () => {
+      const { user, account } = await newLedger(); // opening balance 100000
+      await createTransaction(
+        user,
+        expense(account.id, { type: 'income', categoryId: SALARY, amount: '90000000' }),
+      );
+      await createTransaction(user, expense(account.id, { amount: '450000' }));
+      await createTransaction(user, expense(account.id, { amount: '1' }));
+
+      // 100000 + 90000000 - 450000 - 1
+      expect(await balanceOf(user, account.id)).toBe('89649999');
+    });
+
+    it('can go below zero', async () => {
+      const { user, account } = await newLedger();
+
+      await createTransaction(user, expense(account.id, { amount: '250000' }));
+
+      expect(await balanceOf(user, account.id)).toBe('-150000');
+    });
+
+    it('follows edits, moves between accounts and deletes', async () => {
+      const { user, account } = await newLedger();
+      const other = await createAccount(user, { openingBalance: '0' });
+      const created = await createTransaction(user, expense(account.id, { amount: '30000' }));
+      expect(await balanceOf(user, account.id)).toBe('70000');
+
+      await as(user).patch(`/transactions/${created.id}`, { amount: '40000' }).expect(200);
+      expect(await balanceOf(user, account.id)).toBe('60000');
+
+      await as(user)
+        .patch(`/transactions/${created.id}`, { type: 'income', categoryId: SALARY })
+        .expect(200);
+      expect(await balanceOf(user, account.id)).toBe('140000');
+
+      await as(user).patch(`/transactions/${created.id}`, { accountId: other.id }).expect(200);
+      expect(await balanceOf(user, account.id)).toBe('100000');
+      expect(await balanceOf(user, other.id)).toBe('40000');
+
+      await as(user).delete(`/transactions/${created.id}`).expect(204);
+      expect(await balanceOf(user, other.id)).toBe('0');
+    });
+
+    it('stays exact at the largest amounts, beyond what a JS number holds', async () => {
+      const { user, account } = await newLedger();
+      for (let i = 0; i < 12; i++) {
+        await createTransaction(
+          user,
+          expense(account.id, { type: 'income', categoryId: SALARY, amount: '999999999999999' }),
+        );
+      }
+
+      // 100000 + 12 × 999999999999999, far above 2^53.
+      expect(await balanceOf(user, account.id)).toBe('12000000000099988');
+    });
+
+    it('is listed for every account, including archived ones', async () => {
+      const { user, account } = await newLedger();
+      const archived = await createAccount(user, { openingBalance: '5000' });
+      await createTransaction(user, expense(account.id, { amount: '1000' }));
+      await createTransaction(user, expense(archived.id, { amount: '2000' }));
+      await as(user).post(`/accounts/${archived.id}/archive`).expect(200);
+
+      const res = await as(user).get('/accounts?status=all').expect(200);
+
+      const balances = Object.fromEntries(
+        res.body.items.map((item: { id: string; balance: string }) => [item.id, item.balance]),
+      );
+      expect(balances).toEqual({ [account.id]: '99000', [archived.id]: '3000' });
+    });
+
+    it("never counts another user's transactions", async () => {
+      const { user, account } = await newLedger();
+      const other = await newLedger();
+      await createTransaction(other.user, expense(other.account.id, { amount: '7000' }));
+
+      expect(await balanceOf(user, account.id)).toBe('100000');
+    });
+
+    it('is returned by every account write', async () => {
+      const { user, account } = await newLedger();
+      await createTransaction(user, expense(account.id, { amount: '1000' }));
+
+      const renamed = await as(user).patch(`/accounts/${account.id}`, { name: 'Renamed' });
+      const archived = await as(user).post(`/accounts/${account.id}/archive`);
+      const restored = await as(user).post(`/accounts/${account.id}/restore`);
+
+      expect([renamed, archived, restored].map((res) => res.body.balance)).toEqual([
+        '99000',
+        '99000',
+        '99000',
+      ]);
+    });
+  });
+
   describe('concurrency', () => {
     /**
      * Runs `hold` in a transaction that keeps its locks, sends the request,
@@ -723,7 +822,7 @@ describe('transactions', () => {
       expect(res.status).toBe(409);
     });
 
-    it('lets many transactions be recorded on one account at once', async () => {
+    it('lets many transactions be recorded on one account at once, losing none', async () => {
       const { user, account } = await newLedger();
 
       const responses = await Promise.all(
@@ -732,6 +831,9 @@ describe('transactions', () => {
 
       expect(responses.map((res) => res.status)).toEqual(Array(12).fill(201));
       expect(await prisma.transaction.count({ where: { accountId: account.id } })).toBe(12);
+      // 100000 - 12 × 450000: no write was lost.
+      const res = await as(user).get(`/accounts/${account.id}`).expect(200);
+      expect(res.body.balance).toBe('-5300000');
     });
   });
 });
