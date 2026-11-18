@@ -24,28 +24,28 @@ function apiWith(active: unknown[], archived: unknown[] = []) {
 const list = (name: string) => screen.findByRole('region', { name });
 
 describe('accounts page', () => {
-  it('lists active accounts with their opening balance, labelled as such', async () => {
-    await renderApp('/accounts', apiWith([wireAccount(), SAVINGS]));
+  it('lists active accounts with their current balance', async () => {
+    await renderApp('/accounts', apiWith([wireAccount({ balance: '-150000' }), SAVINGS]));
 
     const rows = within(await list('Active accounts')).getAllByRole('listitem');
 
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain('Ameriabank card');
     expect(rows[0]!.textContent).toContain('Checking · Spendable');
-    expect(rows[0]!.textContent).toContain('Opening balance, 1 Nov 2026');
-    expect(rows[0]!.textContent).toContain(formatAmd(25000050n));
+    expect(rows[0]!.textContent).toContain('Current balance');
+    expect(rows[0]!.textContent).toContain(formatAmd(-150000n));
+    expect(rows[0]!.textContent).not.toContain(formatAmd(25000050n));
     expect(rows[1]!.textContent).toContain('Savings');
     expect(rows[1]!.textContent).not.toContain('Spendable');
     expect(rows[1]!.textContent).toContain(formatAmd(120000000n));
     expect(document.title).toBe('Accounts · Costly');
   });
 
-  it('shows no total and no current balance', async () => {
+  it('shows no total: net worth is analytics, a later chapter', async () => {
     await renderApp('/accounts', apiWith([wireAccount(), SAVINGS]));
     await list('Active accounts');
 
     expect(screen.queryByText(/total/i)).toBeNull();
-    expect(screen.queryByText(/current balance/i)).toBeNull();
   });
 
   it('switches to archived accounts and keeps the choice in the address', async () => {

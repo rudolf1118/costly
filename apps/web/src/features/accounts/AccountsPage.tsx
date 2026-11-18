@@ -9,7 +9,7 @@ import { PageHeader } from '../../ui/PageHeader';
 import { SegmentedControl } from '../../ui/SegmentedControl';
 import { Skeleton } from '../../ui/Skeleton';
 import { AccountFormDialog } from './AccountFormDialog';
-import { OpeningBalance } from './OpeningBalance';
+import { CurrentBalance } from './CurrentBalance';
 import { useAccounts } from './queries';
 
 const route = getRouteApi('/app/accounts');
@@ -22,9 +22,9 @@ const VIEWS = [
 ] as const;
 
 /**
- * The user's accounts. Each shows the opening balance it was created with,
- * labelled as such: there is no current balance or total until the ledger
- * can derive one (ADR-0010).
+ * The user's accounts, each with its current balance as the API derives it
+ * from the account's transactions. There is no total yet: net worth and
+ * liquid money are analytics, a later chapter.
  */
 export function AccountsPage() {
   const view: AccountsView = route.useSearch().view ?? 'active';
@@ -139,7 +139,7 @@ function AccountRow({ account, onEdit }: { account: Account; onEdit: AccountList
             {account.isLiquid ? ' · Spendable' : ''}
           </span>
         </div>
-        <OpeningBalance account={account} className="sm:items-end" />
+        <CurrentBalance account={account} className="sm:items-end" />
       </div>
       {onEdit && (
         <Button

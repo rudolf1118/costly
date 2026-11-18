@@ -28,8 +28,8 @@ function formatInstant(iso: string): string {
 }
 
 /**
- * One account: what it is, its opening balance, and the actions its state
- * allows. An archived account is read-only until it is restored.
+ * One account: what it is, its current and opening balances, and the actions
+ * its state allows. An archived account is read-only until it is restored.
  */
 export function AccountDetailsPage() {
   const { accountId } = route.useParams();
@@ -166,10 +166,13 @@ function AccountDetails({ account }: { account: Account }) {
 
       <Card>
         <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-          <Detail term={`Opening balance, ${formatCalendarDate(account.openingDate)}`}>
+          <Detail term="Current balance">
             <span className="font-mono text-heading-section tabular-nums">
-              {formatAmd(account.openingBalance)}
+              {formatAmd(account.balance)}
             </span>
+          </Detail>
+          <Detail term={`Opening balance, ${formatCalendarDate(account.openingDate)}`}>
+            <span className="font-mono tabular-nums">{formatAmd(account.openingBalance)}</span>
           </Detail>
           <Detail term="Type">{ACCOUNT_TYPE_LABELS[account.type]}</Detail>
           <Detail term="Spendable money">
