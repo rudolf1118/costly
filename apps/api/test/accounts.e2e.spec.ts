@@ -101,6 +101,7 @@ describe('financial accounts', () => {
       expect(res.headers.location).toBe(`/accounts/${res.body.id}`);
       expect(Object.keys(res.body).sort()).toEqual([
         'archivedAt',
+        'balance',
         'createdAt',
         'currency',
         'id',
@@ -118,6 +119,8 @@ describe('financial accounts', () => {
         isLiquid: true,
         openingBalance: '250000',
         openingDate: '2026-01-01',
+        // No transactions yet: the balance is the opening balance.
+        balance: '250000',
         archivedAt: null,
       });
       expect(res.body.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7/);

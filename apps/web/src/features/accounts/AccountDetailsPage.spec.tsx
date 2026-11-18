@@ -41,14 +41,19 @@ function accountApi(start: Record<string, unknown>, routes: Record<string, Route
 }
 
 describe('account details', () => {
-  it('shows the account with its opening balance, labelled as such', async () => {
-    await renderApp(`/accounts/${CARD.id}`, accountApi(CARD));
+  it('shows the account with its current and opening balances, each labelled', async () => {
+    await renderApp(`/accounts/${CARD.id}`, accountApi({ ...CARD, balance: '31000000' }));
 
     await waitFor(() => expect(heading().textContent).toBe('Ameriabank card'));
+    expect(screen.getByText('Current balance')).toBeTruthy();
+    expect(screen.getByRole('main').textContent).toContain(formatAmd(31000000n));
     expect(screen.getByText('Opening balance, 1 Nov 2026')).toBeTruthy();
     expect(screen.getByRole('main').textContent).toContain(formatAmd(25000050n));
     expect(screen.getByText('Checking')).toBeTruthy();
-    expect(screen.queryByText(/current balance/i)).toBeNull();
+    const main = screen.getByRole('main');
+    expect(within(main).getByRole('link', { name: 'Transactions' }).getAttribute('href')).toBe(
+      `/transactions?accountId=${CARD.id}`,
+    );
     expect(document.title).toBe('Account · Costly');
   });
 

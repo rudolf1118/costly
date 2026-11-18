@@ -79,8 +79,25 @@ Decided with the project owner on 2026-11-14, as ADR-0010 left open.
 `accounts.ts` holds the account schemas and request bodies from
 `docs/02-requirements/ledger-accounts.md`.
 
-- `accountSchema` reads `openingBalance` as a `bigint`. It is the balance at the start of the
-  opening date, never a current balance, and clients label it that way.
+- `accountSchema` reads `openingBalance` and `balance` as `bigint`s. `openingBalance` is the
+  balance at the start of the opening date; `balance` is the current balance the API derives from
+  the account's transactions. A balance is a sum, so it may exceed the range of a single amount.
 - `DEFAULT_LIQUIDITY` matches the API's default for each type, so a form can preset the switch.
 - `checkDisplayName` applies the API's name rule (NFC, trimmed, 1–64 code points, no control
   characters) before sending. Category names follow the same rule.
+
+## Categories
+
+`categories.ts` reads categories (`docs/02-requirements/ledger-categories.md`). Clients only list
+them for now, to pick one for a transaction.
+
+## Transactions
+
+`transactions.ts` holds the transaction schemas and request bodies from
+`docs/02-requirements/ledger-transactions.md`.
+
+- `transactionSchema` reads the always-positive `amount` as a `bigint`; `signedAmount` gives it the
+  direction of its type (income positive, expense negative) for display and sums.
+- `transactionPageSchema` reads one page of the list with its opaque `nextCursor`.
+- `transactionsPath` builds the list path from the filters, the page size and the cursor, in a
+  stable order, so equal filters give equal paths and cache keys.

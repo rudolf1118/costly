@@ -24,6 +24,21 @@ export const minorUnits = z
   .refine((value) => value !== '-0', { error: 'Must not be negative zero' })
   .transform((value) => BigInt(value));
 
+/** 1 or more, up to 15 digits without a leading zero: no sign, no zero. */
+const POSITIVE_MINOR_UNITS = /^[1-9][0-9]{0,14}$/;
+
+/**
+ * A strictly positive amount, such as a transaction's: the same string format
+ * as minorUnits, but "0" and any sign are rejected, because the direction of
+ * the money comes from somewhere else (a transaction's type).
+ */
+export const positiveMinorUnits = z
+  .string({ error: 'Must be a string of minor units, such as "150000"' })
+  .regex(POSITIVE_MINOR_UNITS, {
+    error: 'Must be a whole number of minor units between 1 and 999999999999999',
+  })
+  .transform((value) => BigInt(value));
+
 /**
  * JSON.stringify throws on bigint. Registered as Express's JSON replacer, this
  * renders every bigint in a response as its decimal string: the one global

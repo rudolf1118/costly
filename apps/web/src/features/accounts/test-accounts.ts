@@ -8,6 +8,7 @@ export function wireAccount(overrides: Record<string, unknown> = {}) {
     isLiquid: true,
     openingBalance: '25000050',
     openingDate: '2026-11-01',
+    balance: '25000050',
     archivedAt: null,
     createdAt: '2026-11-17T09:00:00.000Z',
     updatedAt: '2026-11-17T09:00:00.000Z',
@@ -22,6 +23,7 @@ export const SAVINGS = wireAccount({
   isLiquid: false,
   openingBalance: '120000000',
   openingDate: '2026-01-15',
+  balance: '120000000',
 });
 
 export const OLD_CARD = wireAccount({
@@ -29,5 +31,6 @@ export const OLD_CARD = wireAccount({
   name: 'Old Visa',
   type: 'credit_card',
   openingBalance: '-4500000',
+  balance: '-4500000',
   archivedAt: '2026-11-10T08:00:00.000Z',
 });

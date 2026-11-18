@@ -1,6 +1,6 @@
 import { type Account, ACCOUNT_TYPE_LABELS, ApiError, formatAmd } from '@costly/shared';
 import { getRouteApi, Link } from '@tanstack/react-router';
-import { ArchiveRestore, ChevronLeft, Pencil } from 'lucide-react';
+import { ArchiveRestore, ArrowLeftRight, ChevronLeft, Pencil } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { toFormError } from '../../auth/errors';
 import { formatCalendarDate } from '../../lib/dates';
@@ -28,8 +28,8 @@ function formatInstant(iso: string): string {
 }
 
 /**
- * One account: what it is, its opening balance, and the actions its state
- * allows. An archived account is read-only until it is restored.
+ * One account: what it is, its current and opening balances, and the actions
+ * its state allows. An archived account is read-only until it is restored.
  */
 export function AccountDetailsPage() {
   const { accountId } = route.useParams();
@@ -134,13 +134,27 @@ function AccountDetails({ account }: { account: Account }) {
     }
   };
 
-  const actions = archived ? (
-    <Button variant="secondary" loading={restore.isPending} onClick={() => void onRestore()}>
-      <ArchiveRestore aria-hidden="true" className="size-4" />
-      Restore
+  // Its transactions stay viewable while archived, only not changeable.
+  const transactionsLink = (
+    <Button asChild variant="secondary">
+      <Link to="/transactions" search={{ accountId: account.id }}>
+        <ArrowLeftRight aria-hidden="true" className="size-4" />
+        Transactions
+      </Link>
     </Button>
+  );
+
+  const actions = archived ? (
+    <>
+      {transactionsLink}
+      <Button variant="secondary" loading={restore.isPending} onClick={() => void onRestore()}>
+        <ArchiveRestore aria-hidden="true" className="size-4" />
+        Restore
+      </Button>
+    </>
   ) : (
     <>
+      {transactionsLink}
       <Button variant="secondary" onClick={() => setConfirmOpen(true)}>
         Archive
       </Button>
@@ -166,10 +180,13 @@ function AccountDetails({ account }: { account: Account }) {
 
       <Card>
         <dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-          <Detail term={`Opening balance, ${formatCalendarDate(account.openingDate)}`}>
+          <Detail term="Current balance">
             <span className="font-mono text-heading-section tabular-nums">
-              {formatAmd(account.openingBalance)}
+              {formatAmd(account.balance)}
             </span>
+          </Detail>
+          <Detail term={`Opening balance, ${formatCalendarDate(account.openingDate)}`}>
+            <span className="font-mono tabular-nums">{formatAmd(account.openingBalance)}</span>
           </Detail>
           <Detail term="Type">{ACCOUNT_TYPE_LABELS[account.type]}</Detail>
           <Detail term="Spendable money">

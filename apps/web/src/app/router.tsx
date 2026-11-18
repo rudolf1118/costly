@@ -12,6 +12,8 @@ import { AuthLayout } from '../auth/AuthLayout';
 import type { SessionStore } from '../auth/session';
 import { AccountDetailsPage } from '../features/accounts/AccountDetailsPage';
 import { AccountsPage } from '../features/accounts/AccountsPage';
+import { validateTransactionSearch } from '../features/transactions/search';
+import { TransactionsPage } from '../features/transactions/TransactionsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { OverviewPage } from '../pages/OverviewPage';
@@ -121,6 +123,14 @@ const accountDetailsRoute = createRoute({
   staticData: { title: 'Account' },
 });
 
+const transactionsRoute = createRoute({
+  getParentRoute: () => appRoute,
+  path: '/transactions',
+  component: TransactionsPage,
+  validateSearch: validateTransactionSearch,
+  staticData: { title: 'Transactions' },
+});
+
 const settingsRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/settings',
@@ -145,7 +155,13 @@ const registerRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
-  appRoute.addChildren([overviewRoute, accountsRoute, accountDetailsRoute, settingsRoute]),
+  appRoute.addChildren([
+    overviewRoute,
+    accountsRoute,
+    accountDetailsRoute,
+    transactionsRoute,
+    settingsRoute,
+  ]),
   authRoute.addChildren([loginRoute, registerRoute]),
 ]);
 

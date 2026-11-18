@@ -53,18 +53,16 @@ Archived accounts are read-only, kept for history, listed only on request, and e
 
 ## Balance semantics
 
-There is **no balance column** (technical design §1.1) and no transaction ledger yet, so the API exposes only the opening balance, never a "current balance". A current balance would claim knowledge the system doesn't have.
-
-When the ledger arrives (Chapter 1, task 6), an account's balance at the end of day `D` will be:
+There is **no balance column** (technical design §1.1). Since transactions exist ([`ledger-transactions.md`](ledger-transactions.md)), every account response carries `balance`, computed from the ledger on each read:
 
 ```
-opening_balance + Σ inflows − Σ outflows   over posted transactions with opening_date ≤ occurred_on ≤ D
+balance = opening_balance + Σ income − Σ expense   over the account's transactions
 ```
 
-- Inflows are `income` and `transfer_in`; outflows are `expense` and `transfer_out`.
-- Transfers are pairs of rows, so they move money between accounts without changing the user's total.
-- The ledger will reject transactions dated before the opening date, and new transactions or transfers on archived accounts.
-- An archived account's past transactions stay in history and period analytics. Its balance is excluded from current totals, such as net worth, liquid money and the emergency-fund runway.
+- Transactions can't predate the opening date and can't be in the future, so this is the balance **now**. A balance at the end of an earlier day `D` restricts the sum to `occurred_on ≤ D`; it is not exposed yet.
+- Transfers, when they arrive, are pairs of rows (`transfer_out`, `transfer_in`) that move money between accounts without changing the user's total.
+- The ledger rejects transactions dated before the opening date, and any change to the transactions of an archived account.
+- An archived account's transactions stay in history and in its balance. Its balance will be excluded from current totals, such as net worth, liquid money and the emergency-fund runway, when those totals are built.
 
 ## Ownership
 
