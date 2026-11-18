@@ -32,6 +32,7 @@ model User {
   refreshTokens RefreshToken[]
   accounts      Account[]
   categories    Category[]
+  transactions  Transaction[]
 
   @@map("users")
 }
@@ -91,8 +92,12 @@ model Account {
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  transactions Transaction[]
 
+  /// The target of transactions' composite foreign key: a transaction's
+  /// account belongs to its owner and has its currency.
+  @@unique([id, userId, currency], map: "accounts_id_user_id_currency_key")
   @@index([userId, id])
   @@map("accounts")
 }
@@ -134,11 +139,55 @@ model Category {
   createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user     User?      @relation(fields: [userId], references: [id], onDelete: Restrict)
-  parent   Category?  @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Restrict)
-  children Category[] @relation("CategoryChildren")
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  parent       Category?     @relation("CategoryChildren", fields: [parentId], references: [id], onDelete: Restrict)
+  children     Category[]    @relation("CategoryChildren")
+  transactions Transaction[]
 
   @@index([userId, id])
   @@index([parentId])
   @@map("categories")
+}
+
+// ledger: which way a transaction moves money. Transfers add their values
+// when they arrive (docs/02-requirements/ledger-transactions.md).
+enum TransactionType {
+  income
+  expense
+
+  @@map("transaction_type")
+}
+
+// ledger: one income or expense on one account. The amount is always positive;
+// the type gives the direction. There is no balance anywhere: balances are sums
+// over these rows. The amount, date and description CHECKs and the trigger that
+// enforces the category, opening-date and owner rules live in the migration
+// SQL; see docs/04-database/tables/ledger.md.
+model Transaction {
+  id          String          @id @default(dbgenerated("uuidv7()")) @db.Uuid
+  userId      String          @map("user_id") @db.Uuid
+  accountId   String          @map("account_id") @db.Uuid
+  categoryId  String          @map("category_id") @db.Uuid
+  type        TransactionType
+  /// Minor units (ADR-0002), always positive.
+  amount      BigInt
+  /// Always the account's currency (the composite foreign key).
+  currency    String          @db.Char(3)
+  /// The day it happened, the date analytics groups by.
+  occurredOn  DateTime        @map("occurred_on") @db.Date
+  description String?
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime        @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  account  Account  @relation(fields: [accountId, userId, currency], references: [id, userId, currency], onDelete: Restrict, onUpdate: Restrict)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  /// The list, newest first, and every analytics date range.
+  @@index([userId, occurredOn(sort: Desc), id(sort: Desc)])
+  /// Category analytics and the category filter.
+  @@index([userId, categoryId, occurredOn])
+  /// Balances and the account filter.
+  @@index([accountId, occurredOn])
+  @@map("transactions")
 }
