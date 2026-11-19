@@ -13,6 +13,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
+    "db:seed:demo": "node --env-file-if-exists=.env scripts/seed-demo.mts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
