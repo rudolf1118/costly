@@ -21,6 +21,12 @@ export function configureHttp(app: INestApplication): void {
   // Parses the refresh cookie (ADR-0006).
   app.use(cookieParser());
   // The web client runs on its own origin. credentials: true lets it send and
-  // receive the refresh cookie; only this one origin may do so.
-  app.enableCors({ origin: config.get('CORS_ORIGIN', { infer: true }), credentials: true });
+  // receive the refresh cookie; only this one origin may do so. Retry-After
+  // isn't a CORS-safelisted header, so a 429's wait (ADR-0006) must be exposed
+  // for the web client to read it.
+  app.enableCors({
+    origin: config.get('CORS_ORIGIN', { infer: true }),
+    credentials: true,
+    exposedHeaders: ['Retry-After'],
+  });
 }

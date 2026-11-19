@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider, type RouterHistory } from '@tanstack/react-router';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { createAppRouter } from './app/router';
-import { SessionStore } from './auth/session';
+import { wait } from './auth/errors';
+import { SessionStore, type SessionState } from './auth/session';
 import { SessionProvider } from './auth/SessionContext';
 import { Button } from './ui/Button';
 import { LogoMark } from './ui/Logo';
@@ -38,7 +39,9 @@ export function App({ apiBaseUrl, session: injected, history }: AppProps) {
   }, [state, router, queryClient]);
 
   if (state.status === 'restoring') return <Starting />;
-  if (state.status === 'unavailable') return <Unreachable onRetry={() => session.restore()} />;
+  if (state.status === 'unavailable') {
+    return <Unavailable state={state} onRetry={() => session.restore()} />;
+  }
 
   return (
     <SessionProvider store={session}>
@@ -78,14 +81,40 @@ function Starting() {
   );
 }
 
-/** The API didn't answer on start: not the same as being signed out. */
-function Unreachable({ onRetry }: { onRetry: () => void }) {
+const UNAVAILABLE_TEXT = {
+  unreachable: () => ({
+    title: 'Costly can’t be reached',
+    detail: 'Check your connection.',
+  }),
+  'rate-limited': (retryAfterSeconds?: number) => ({
+    title: 'Sign-in is paused for now',
+    detail: `Too many sign-in attempts from this device. ${wait(retryAfterSeconds)}`,
+  }),
+  busy: () => ({
+    title: 'Costly is temporarily unavailable',
+    detail: 'Try again in a moment.',
+  }),
+};
+
+/**
+ * The session couldn't be restored on start: not the same as being signed
+ * out. Says why, since only "no answer" is a connection problem; a 429 means
+ * the API answered and asks to wait.
+ */
+function Unavailable({
+  state,
+  onRetry,
+}: {
+  state: Extract<SessionState, { status: 'unavailable' }>;
+  onRetry: () => void;
+}) {
+  const { title, detail } = UNAVAILABLE_TEXT[state.reason](state.retryAfterSeconds);
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-page px-6 text-center text-text">
       <LogoMark className="size-10 text-accent-muted" />
-      <h1 className="text-heading-section">Costly can’t be reached</h1>
+      <h1 className="text-heading-section">{title}</h1>
       <p className="max-w-sm text-body text-text-secondary">
-        Check your connection. Your data is safe; nothing was changed.
+        {detail} Your data is safe; nothing was changed.
       </p>
       <Button variant="secondary" onClick={onRetry}>
         Try again

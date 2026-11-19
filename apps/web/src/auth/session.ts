@@ -14,8 +14,16 @@ export type SessionState =
   | { status: 'authenticated'; user: UserProfile }
   /** `expired`: a session existed and the API ended it. */
   | { status: 'anonymous'; reason?: 'signed-out' | 'expired' }
-  /** The API couldn't be reached, so it's unknown whether a session exists. */
-  | { status: 'unavailable' };
+  /** The API didn't settle the session, so it's unknown whether one exists. */
+  | { status: 'unavailable'; reason: UnavailableReason; retryAfterSeconds?: number };
+
+/**
+ * Why the session couldn't be restored on start:
+ * - `unreachable`: no answer at all, a connection problem.
+ * - `rate-limited`: a 429; the API answered and asks to wait (ADR-0006).
+ * - `busy`: a 503 or other server failure; the API answered but can't serve now.
+ */
+export type UnavailableReason = 'unreachable' | 'rate-limited' | 'busy';
 
 export interface RegisterInput {
   email: string;
@@ -28,6 +36,21 @@ const EXPIRY_MARGIN_MS = 30_000;
 /** ADR-0006: a 409 from refresh means "retry once with the cookie that just changed". */
 const CONFLICT_RETRY_MS = 300;
 
+function unavailable(error: unknown): SessionState {
+  if (error instanceof ApiError && error.kind === 'http' && error.status === 429) {
+    const seconds = error.problem?.retryAfterSeconds;
+    return {
+      status: 'unavailable',
+      reason: 'rate-limited',
+      ...(seconds === undefined ? {} : { retryAfterSeconds: seconds }),
+    };
+  }
+  if (error instanceof ApiError && error.kind === 'http') {
+    return { status: 'unavailable', reason: 'busy' };
+  }
+  return { status: 'unavailable', reason: 'unreachable' };
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
@@ -38,8 +61,8 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  * - The refresh token is the API's HttpOnly cookie. This class never sees
  *   it; it only sends the cookie endpoints with `credentials: "include"`.
  * - On start, `restore()` asks for a new access token: success restores the
- *   session, 401 means signed out, no answer means "unavailable", which is
- *   not the same as signed out.
+ *   session, 401 means signed out, anything else means "unavailable", which
+ *   is not the same as signed out: no answer, a 429 or a server failure.
  */
 export class SessionStore implements SessionHandler {
   readonly api: ApiClient;
@@ -150,9 +173,9 @@ export class SessionStore implements SessionHandler {
         return;
       }
       await this.loadUser();
-    } catch {
+    } catch (error) {
       this.token = null;
-      this.setState({ status: 'unavailable' });
+      this.setState(unavailable(error));
     }
   }
 
