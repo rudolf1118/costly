@@ -106,6 +106,7 @@ docs/
     thesis-outline.md              chapter plan mapping docs → thesis sections
     progress-log.md                dated entries: what was done, decisions, supervisor feedback
     chapter-reports/               one short report per development chapter (v0.1 … v1.0)
+    review-1-demo.md               demo script for the first review (Chapter 1 so far)
     defense-demo-script.md         minute-by-minute demo, fallback plan
     slides/                        defense presentation sources
 ```

@@ -15,10 +15,29 @@ ledger     analytics       forecasting    goals · what-if · recommendations
 ```
 
 ## Status
-**Chapter 1 — financial core, in progress.** Registration, login with rotating refresh sessions
-and rate limiting, financial accounts and two-level categories (seeded system categories plus
-the user's own) are implemented. Merchants, transactions and transfers, recurring rules and a
-first dashboard follow, released as `v0.1.0`. See the [progress log](docs/10-diploma/progress-log.md).
+**Chapter 1 — financial core, in progress.** The API has registration, login with rotating
+refresh sessions and rate limiting, financial accounts and two-level categories (seeded system
+categories plus the user's own). The web client has sign-in, registration and accounts, in four
+responsive layouts with light and dark themes. Merchants, transactions and transfers, recurring
+rules and a first dashboard follow, released as `v0.1.0`. See the
+[progress log](docs/10-diploma/progress-log.md).
+
+## Running locally
+Requires Node 24, pnpm 12 and Docker.
+
+```bash
+pnpm install
+pnpm infra:up                                  # PostgreSQL on 5433, Redis on 6380
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+pnpm db:deploy                                 # migrations, including the system categories
+pnpm --filter @costly/api build && pnpm --filter @costly/api start   # API on http://localhost:3100
+pnpm --filter @costly/web dev                  # web client on http://localhost:5173
+```
+
+`pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` run the same checks as CI. The API
+tests start their own PostgreSQL and Redis containers. `pnpm infra:down` stops the local
+infrastructure.
 
 ## Documents
 | Document | For |

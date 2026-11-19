@@ -19,7 +19,7 @@ measurement. The git history and the pull requests linked here are the evidence.
 | 3. Registration | 2026-11-06 | #3 | `POST /auth/register`, Argon2id (ADR-0005), RFC 9457 errors, zod validation. |
 | 4. Authentication | 2026-11-10 | #4 | Login, JWT access tokens, rotating refresh sessions, logout, guard, Redis rate limits (ADR-0006). |
 | 5. Financial accounts | 2026-11-10 | #5 | `accounts` table; create, list, read, update, archive and restore; money as minor-unit strings. |
-| 6. Categories | in review | #6 | `categories` table with 36 seeded system categories; two levels with `nature`; users' own categories, including under system parents; archive and restore with row locks. |
+| 6. Categories | 2026-11-17 | #6, #10 | `categories` table with 36 seeded system categories; two levels with `nature`; users' own categories, including under system parents; archive and restore with row locks. #10 applied the audit fixes. |
 
 Notes worth keeping for the thesis:
 - **Task 2:** Prisma's generated migration lacked `CREATE EXTENSION citext` and would have failed on
@@ -73,5 +73,48 @@ Notes worth keeping for the thesis:
     failed whenever Docker's clock lagged the API's. Any raw `archived_at` write must use
     `GREATEST(now(), created_at)`.
 
+### Web client
+
+The web client was built alongside the API from task 6 on. Each step merged with CI green and
+was checked in a browser against a running API.
+
+| Step | Merged | Pull request | Outcome |
+|---|---|---|---|
+| Web architecture | 2026-11-17 | #7 | ADR-0010: React with TanStack Router and Query, shadcn/ui on Radix, Tailwind reading the design tokens, react-hook-form with zod. |
+| Native clients | 2026-11-17 | #8 | ADR-0011 (proposed, for the supervisor): Expo clients after the web, sharing `packages/shared`. |
+| Shared package | 2026-11-17 | #9 | `packages/shared`: the AMD money codec (parse, format, strict input) and RFC 9457 problem details. |
+| Design system | 2026-11-17 | #11 | `packages/design-tokens` generating CSS variables and the Tailwind theme; light and dark themes without a flash; base components; WCAG contrast pairs tested. |
+| Application shell | 2026-11-17 | #12 | Routing, four responsive layouts (sidebar, icon rail, top bar, bottom tabs), skip link and focus on navigation, toasts. |
+| Sign-in | 2026-11-17 | #13 | API client with single-flight refresh, in-memory session restored from the HttpOnly cookie, route guards, sign-in, registration and sign-out. |
+| Accounts | 2026-11-18 | #14 | List with active and archived views, add and edit in a drawer, details with archive and restore. |
+
+Notes worth keeping for the thesis:
+- **ADR numbers:** 0007–0009 were already reserved for planned backend decisions, so the web
+  ADRs became 0010 and 0011 instead of taking the next free number.
+- **Money on screen** (#9):
+  - Amounts stay `bigint` from the API to the screen. Decimals are shown only when non-zero.
+  - Input refuses ambiguous text instead of guessing: `0,500` could be half a dram or five
+    hundred.
+- **The client computes no figures** (ADR-0010). An account shows only its opening balance,
+  labelled as such. A current balance or a total waits for the ledger to provide it.
+- **Every response is validated** with zod at the client boundary, so a drifted contract shows
+  as an error, never as a wrong number.
+- **Sessions** (#13):
+  - The API accepts each refresh token once, so concurrent refreshes share one request.
+  - An API that can't be reached is a separate state with its own screen. An outage never signs
+    the user out.
+- **Design tokens** (#11): `tailwind-merge` silently dropped custom text sizes such as
+  `text-body` next to a colour class, because both start with `text-`. It now knows the theme's
+  names.
+- **Accessibility:**
+  - Page tests first ran axe on the rendered container only, which hid two problems: the sign-in
+    logo and footer were outside every landmark, and the not-found page had no `<main>`. Page
+    checks now run on the whole document.
+  - Known gap: input borders are 1.5:1 against the surface, below the 3:1 WCAG asks of
+    component boundaries. They are kept as designed for now.
+- **Browser check of accounts** (#14): the not-found text said an account might belong to
+  someone else. The API deliberately answers 404 for both, so the page now says neither.
+
 Next in Chapter 1: merchants, transactions and transfers (the ledger), recurring
-rules, the first dashboard and seeded demo data, released as `v0.1.0`.
+rules, the first dashboard and seeded demo data, released as `v0.1.0`. On the web: categories,
+then transactions as their API arrives.
