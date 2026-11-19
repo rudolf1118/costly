@@ -17,7 +17,8 @@
     "infra:down": "docker compose down",
     "db:generate": "pnpm --filter @costly/api db:generate",
     "db:migrate": "pnpm --filter @costly/api db:migrate",
-    "db:deploy": "pnpm --filter @costly/api db:deploy"
+    "db:deploy": "pnpm --filter @costly/api db:deploy",
+    "db:seed:demo": "pnpm --filter @costly/api db:seed:demo"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
