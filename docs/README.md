@@ -127,3 +127,13 @@ docs/
 7. Decision support: goals, simulation, recommendations → `07-decision-support`
 8. Testing, performance and experimental results → `08-testing`, `09-research`
 9. Conclusion and future work
+
+## Armenian diploma documents / Հայերեն նյութեր
+
+Verified against the implementation on 2026-11-19; current features and future plans are distinguished.
+
+- [01 — Նախագծի ընդհանուր նկարագիր](10-diploma/01-project-overview-hy.md)
+- [02 — Համակարգի ճարտարապետություն](10-diploma/02-architecture-hy.md)
+- [03 — Իրականացված հնարավորություններ և PR-ների վիճակ](10-diploma/03-implemented-features-hy.md)
+- [04 — Մաթեմատիկական մեթոդներ և հետազոտական պլան](10-diploma/04-mathematical-methods-hy.md)
+- [05 — Առաջին ստուգման խոսք, demo և հարցուպատասխան](10-diploma/05-defense-preparation-hy.md)
