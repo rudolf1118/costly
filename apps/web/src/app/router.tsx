@@ -12,11 +12,12 @@ import { AuthLayout } from '../auth/AuthLayout';
 import type { SessionStore } from '../auth/session';
 import { AccountDetailsPage } from '../features/accounts/AccountDetailsPage';
 import { AccountsPage } from '../features/accounts/AccountsPage';
+import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { isMonth } from '../features/dashboard/month';
 import { validateTransactionSearch } from '../features/transactions/search';
 import { TransactionsPage } from '../features/transactions/TransactionsPage';
 import { LoginPage } from '../pages/LoginPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
-import { OverviewPage } from '../pages/OverviewPage';
 import { RegisterPage } from '../pages/RegisterPage';
 import { SettingsPage } from '../pages/SettingsPage';
 import { AppShell } from './AppShell';
@@ -102,7 +103,10 @@ const authRoute = createRoute({
 const overviewRoute = createRoute({
   getParentRoute: () => appRoute,
   path: '/',
-  component: OverviewPage,
+  component: DashboardPage,
+  // The current month is the default, so only a past month appears in the address.
+  validateSearch: (search: Record<string, unknown>): { month?: string } =>
+    isMonth(search.month) ? { month: search.month } : {},
   staticData: { title: 'Overview' },
 });
 

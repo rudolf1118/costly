@@ -276,6 +276,49 @@ A transaction in a response:
 - An `accountId` or `categoryId` the caller can't use gets the same 400 message whether it is missing or another user's. As a list filter, it simply matches nothing.
 - All errors also include 401 for a missing or invalid access token.
 
+### Dashboard
+
+`GET /dashboard/summary?month=YYYY-MM` requires `Authorization: Bearer <accessToken>` and returns one month of the caller's ledger in one response. The rules (which accounts each total counts, the month boundaries, when a comparison exists) are in [`02-requirements/dashboard-v1.md`](../02-requirements/dashboard-v1.md).
+
+```json
+{
+  "month": "2026-11",
+  "currency": "AMD",
+  "income": "70000000",
+  "expense": "58104600",
+  "net": "11895400",
+  "transactionCount": 22,
+  "previous": { "income": "110758000", "expense": "58949400", "net": "51808600" },
+  "balance": { "total": "777383200", "previousMonthEnd": "765487800", "accountCount": 5 },
+  "history": [{ "month": "2025-12", "income": "0", "expense": "0" }],
+  "categories": [
+    { "categoryId": "00000000-0000-7000-8000-000000000007", "name": "Rent", "parentName": "Housing", "amount": "25000000", "transactionCount": 1 }
+  ],
+  "daily": [{ "date": "2026-11-01", "income": "0", "expense": "25000000" }],
+  "recentTransactions": [
+    {
+      "id": "01a1f083-ce6a-736d-9190-90f0dc9eab54",
+      "type": "expense",
+      "amount": "420000",
+      "currency": "AMD",
+      "occurredOn": "2026-11-18",
+      "description": "Books",
+      "account": { "id": "01a1f0b3-53e2-7049-b643-249c9ee74ea3", "name": "Secondary Bank Card" },
+      "category": { "id": "00000000-0000-7000-8000-000000000018", "name": "Books", "parentName": "Education" }
+    }
+  ],
+  "accounts": [
+    { "id": "01a1f0b3-53e2-7049-b643-249c9ee74ea3", "name": "Main Bank Card", "type": "checking", "currency": "AMD", "isLiquid": true, "balance": "249578800" }
+  ]
+}
+```
+
+`history` always has 12 entries and `daily` one per day of the month (shortened above). Every amount is a decimal string of minor units; sums can have more digits than a single amount's 15. `net` and the balances may be negative; `balance.previousMonthEnd` is `null` when none of the active accounts was open a month earlier.
+
+| Request | Success | Errors |
+|---|---|---|
+| `GET /dashboard/summary?month=YYYY-MM` | `200` summary | 400 for a missing or malformed month, a month before `1900-01` or after the current month in UTC+14, or an unknown parameter; 401 |
+
 ### Pagination
 
 Lists that can grow without bound use **keyset (cursor) pagination**, first on `GET /transactions`:

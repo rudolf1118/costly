@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 /** The latest calendar date anywhere on Earth: today in UTC+14. */
-function latestDateToday(): string {
+export function latestDateToday(): string {
   return new Date(Date.now() + 14 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 

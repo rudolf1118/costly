@@ -77,3 +77,10 @@ export {
   type TransactionType,
   type UpdateTransactionBody,
 } from './transactions';
+export {
+  type DashboardSummary,
+  dashboardSummaryPath,
+  dashboardSummarySchema,
+  percentChange,
+  percentOf,
+} from './dashboard';
